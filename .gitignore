@@ -1,0 +1,31 @@
+# Ambientes Virtuais e Caches
+.venv/
+env/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Modelos e Pesos Neurais (NUNCA versionar arquivos binários pesados)
+models/*.gguf
+models/*.bin
+*.partial
+
+# Runtime compilado (distribuído separadamente ou baixado via preparar_modelo.py)
+runtime/*.exe
+runtime/*.dll
+runtime/*.zip
+runtime/LICENSE*
+!runtime/versoes.json
+
+# Logs e arquivos de sistema
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs e Editores
+.vscode/
+.idea/
+*.swp
