@@ -5,6 +5,7 @@ import math
 import os
 import re
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
@@ -14,7 +15,39 @@ from starlette.responses import StreamingResponse
 
 ROOT = Path(__file__).parent
 LLAMA = 'http://127.0.0.1:8081'
-app = FastAPI(title='Universo Local', description='Navegação tridimensional em modelo de linguagem')
+
+# Configuração de pooling HTTP persistente para máxima performance e baixa latência
+CLIENT_LIMITS = httpx.Limits(max_keepalive_connections=20, max_connections=50, keepalive_expiry=60.0)
+CLIENT_TIMEOUT = httpx.Timeout(120.0, connect=3.0)
+_HTTP_CLIENT: httpx.AsyncClient | None = None
+
+
+def get_client() -> httpx.AsyncClient:
+    """Retorna cliente HTTP persistente com reaproveitamento de conexões TCP (Keep-Alive)."""
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT is None or _HTTP_CLIENT.is_closed:
+        _HTTP_CLIENT = httpx.AsyncClient(
+            limits=CLIENT_LIMITS,
+            timeout=CLIENT_TIMEOUT
+        )
+    return _HTTP_CLIENT
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Gerencia ciclo de vida do cliente HTTP para conexões com llama.cpp."""
+    get_client()
+    yield
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT and not _HTTP_CLIENT.is_closed:
+        await _HTTP_CLIENT.aclose()
+
+
+app = FastAPI(
+    title='Universo Local',
+    description='Navegação tridimensional em modelo de linguagem',
+    lifespan=lifespan
+)
 INFERENCE_LOCK = asyncio.Lock()
 
 STOP = set(
@@ -51,10 +84,14 @@ GROUPS = {
     ],
 }
 
+WORDS_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", re.UNICODE)
+CANDIDATE_RE = re.compile(r'[A-Za-zÀ-ÿ]{2,}')
+GROUPS_SET = {g: set(words_list) for g, words_list in GROUPS.items()}
+
 
 def words(text: str):
     """Extrai palavras limpas com suporte a caracteres acentuados da língua portuguesa."""
-    return re.findall(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", text.lower(), re.UNICODE)
+    return WORDS_RE.findall(text.lower())
 
 
 def readable_candidates(items):
@@ -63,7 +100,7 @@ def readable_candidates(items):
     seen = set()
     for item in items:
         token = str(item.get('token', '')).strip()
-        if not re.search(r'[A-Za-zÀ-ÿ]{2,}', token) or token in seen:
+        if not CANDIDATE_RE.search(token) or token in seen:
             continue
         seen.add(token)
         clean.append(dict(token=token, probability=math.exp(item['logprob'])))
@@ -81,7 +118,7 @@ def graph(text: str, answer: str = ''):
 
     # Ampla cobertura de termos da resposta para enriquecer a exploração visual
     keys = list(dict.fromkeys(source + reply))[-110:]
-    active = [g for g, vocabulary in GROUPS.items() if any(w in vocabulary for w in source + reply)]
+    active = [g for g, vocab_set in GROUPS_SET.items() if any(w in vocab_set for w in source + reply)]
 
     expanded = []
     for g in active:
@@ -89,7 +126,7 @@ def graph(text: str, answer: str = ''):
 
     nodes = []
     for w in keys:
-        g = next((g for g, vocabulary in GROUPS.items() if w in vocabulary), 'contexto')
+        g = next((g for g, vocab_set in GROUPS_SET.items() if w in vocab_set), 'contexto')
         if w in source:
             weight = min(1.0, 0.50 + 0.12 * source.count(w))
             origin = 'entrada'
@@ -129,9 +166,9 @@ def graph(text: str, answer: str = ''):
 async def status():
     """Verifica a disponibilidade do runtime llama.cpp na porta local 8081."""
     try:
-        async with httpx.AsyncClient(timeout=2) as client:
-            response = await client.get(LLAMA + '/health')
-            response.raise_for_status()
+        client = get_client()
+        response = await client.get(LLAMA + '/health', timeout=1.5)
+        response.raise_for_status()
         return {'ready': True, 'engine': 'llama.cpp · CPU', 'model': 'Qwen2.5-0.5B-Instruct Q4_K_M'}
     except (httpx.HTTPError, ValueError):
         return {'ready': False, 'engine': 'llama.cpp · CPU', 'model': 'não conectado'}
@@ -154,12 +191,12 @@ async def api_generate(data: dict):
     text = str(data.get('text', ''))[:4000]
     mode = 'demo' if data.get('mode') == 'demo' else 'local'
 
-    async def event(name, **payload):
+    def event(name, **payload) -> str:
         return f"event: {name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     async def stream():
         if not text.strip():
-            yield await event('done', answer='', graph=graph(''), candidates=[])
+            yield event('done', answer='', graph=graph(''), candidates=[])
             return
 
         started = time.perf_counter()
@@ -173,10 +210,10 @@ async def api_generate(data: dict):
                 'Para gerar respostas reais e ver probabilidades ao vivo, ative o Modo Modelo Local.'
             )
             for fragment in re.findall(r'\S+\s*', answer):
-                yield await event('chunk', text=fragment, candidates=[])
+                yield event('chunk', text=fragment, candidates=[])
                 await asyncio.sleep(0.025)
 
-            yield await event(
+            yield event(
                 'done',
                 answer=answer,
                 graph=graph(text, answer),
@@ -189,6 +226,7 @@ async def api_generate(data: dict):
         answer = ''
         latest_candidates = []
         output_tokens = 0
+        client = get_client()
 
         try:
             # System prompt balanceado para enriquecer o vocabulário e a cena 3D
@@ -199,57 +237,72 @@ async def api_generate(data: dict):
             )
             messages = [{'role': 'system', 'content': system}, {'role': 'user', 'content': text}]
 
-            async with INFERENCE_LOCK, httpx.AsyncClient(timeout=httpx.Timeout(120, connect=3)) as client:
-                # Contagem de tokens e verificação de template
-                prompt_count = 0
-                try:
-                    template_resp = await client.post(
-                        LLAMA + '/apply-template',
-                        json={'messages': messages, 'add_generation_prompt': True}
-                    )
-                    if template_resp.status_code == 200:
-                        rendered = template_resp.json().get('prompt', '')
-                        tok_resp = await client.post(LLAMA + '/tokenize', json={'content': rendered})
-                        if tok_resp.status_code == 200:
-                            prompt_count = len(tok_resp.json().get('tokens', []))
-                except Exception:
-                    # Fallback suave de contagem direta
-                    try:
-                        tok_resp = await client.post(LLAMA + '/tokenize', json={'content': text})
-                        if tok_resp.status_code == 200:
-                            prompt_count = len(tok_resp.json().get('tokens', []))
-                    except Exception:
-                        prompt_count = len(words(text))
-
-                if prompt_count > 1000:
-                    yield await event(
-                        'error',
-                        message='Texto muito longo para este protótipo. Mantenha a pergunta em até 1.000 tokens.'
-                    )
-                    return
-
-                # Limite de tokens de saída balanceado: 140 tokens (rico em nós para o 3D)
-                payload = dict(
-                    model='local',
-                    messages=messages,
-                    stream=True,
-                    max_tokens=140,
-                    temperature=0.7,
-                    top_p=1.0,
-                    top_k=0,
-                    logprobs=True,
-                    top_logprobs=50,
-                    cache_prompt=True
+            # Contagem prévia ágil e resiliente sem atrasar o TTFT (Time To First Token)
+            prompt_count = 0
+            try:
+                # Timeout ultrarrápido (0.25s) para não prender o início da inferência
+                template_resp = await client.post(
+                    LLAMA + '/apply-template',
+                    json={'messages': messages, 'add_generation_prompt': True},
+                    timeout=httpx.Timeout(0.25, connect=0.1)
                 )
+                if template_resp.status_code == 200:
+                    rendered = template_resp.json().get('prompt', '')
+                    tok_resp = await client.post(
+                        LLAMA + '/tokenize',
+                        json={'content': rendered},
+                        timeout=httpx.Timeout(0.15, connect=0.1)
+                    )
+                    if tok_resp.status_code == 200:
+                        prompt_count = len(tok_resp.json().get('tokens', []))
+            except Exception:
+                # Fallback imediato: tenta tokenize direto com timeout ultracurto ou estimação lexical
+                try:
+                    tok_resp = await client.post(
+                        LLAMA + '/tokenize',
+                        json={'content': text},
+                        timeout=httpx.Timeout(0.15, connect=0.1)
+                    )
+                    if tok_resp.status_code == 200:
+                        prompt_count = len(tok_resp.json().get('tokens', [])) + 55
+                except Exception:
+                    prompt_count = len(words(text)) + 55
 
+            if not prompt_count:
+                prompt_count = len(words(text)) + 55
+
+            if prompt_count > 1000:
+                yield event(
+                    'error',
+                    message='Texto muito longo para este protótipo. Mantenha a pergunta em até 1.000 tokens.'
+                )
+                return
+
+            # Limite de tokens de saída balanceado: 140 tokens (rico em nós para o 3D)
+            payload = dict(
+                model='local',
+                messages=messages,
+                stream=True,
+                max_tokens=140,
+                temperature=0.7,
+                top_p=1.0,
+                top_k=0,
+                logprobs=True,
+                top_logprobs=50,
+                cache_prompt=True
+            )
+
+            async with INFERENCE_LOCK:
                 async with client.stream('POST', LLAMA + '/v1/chat/completions', json=payload) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
                         if not line.startswith('data: '):
                             continue
-                        raw = line[6:]
+                        raw = line[6:].strip()
                         if raw == '[DONE]':
                             break
+                        if not raw:
+                            continue
                         packet = json.loads(raw)
                         choices = packet.get('choices') or []
                         if not choices:
@@ -262,10 +315,10 @@ async def api_generate(data: dict):
                             latest_candidates = readable_candidates(logs[-1].get('top_logprobs', []))
                         if fragment:
                             answer += fragment
-                            yield await event('chunk', text=fragment, candidates=latest_candidates)
+                            yield event('chunk', text=fragment, candidates=latest_candidates)
 
             elapsed = max(0.01, time.perf_counter() - started)
-            yield await event(
+            yield event(
                 'done',
                 answer=answer,
                 graph=graph(text, answer),
@@ -276,7 +329,7 @@ async def api_generate(data: dict):
             )
 
         except (httpx.HTTPError, ValueError, KeyError, IndexError, json.JSONDecodeError) as exc:
-            yield await event(
+            yield event(
                 'error',
                 message='Modelo local indisponível ou em inicialização. Verifique se o INICIAR_APP.bat está aberto. Detalhe: ' + str(exc)[:300]
             )
@@ -285,7 +338,7 @@ async def api_generate(data: dict):
         stream(),
         media_type='text/event-stream',
         headers={
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache, no-transform',
             'Connection': 'keep-alive',
             'X-Accel-Buffering': 'no'
         }
