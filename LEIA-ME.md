@@ -1,6 +1,6 @@
 # Universo Local — protótipo 0.1
 
-Chat explorável com mapa tridimensional, resposta provisória automática e candidatos a próximos tokens. Projetado para uma pessoa, em Windows x64, 12 GB de RAM, com inferência somente em CPU. O desempenho no seu i7-4500U ainda precisa ser medido.
+Chat explorável com mapa tridimensional, resposta provisória automática e candidatos a próximos tokens. Projetado para uma pessoa, em Windows x64, 12 GB de RAM, com inferência somente em CPU (benchmark de referência testado em processador Intel Core i7 dual-core).
 
 ## Começar no Windows
 

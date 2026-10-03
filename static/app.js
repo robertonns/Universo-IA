@@ -11,17 +11,85 @@ const colors = {
   viagem: '#f3bd7c',
   cotidiano: '#e899b7',
   contexto: '#b5c5d6',
-  probabilidade: '#e9eeb0'
+  probabilidade: '#e9eeb0',
+  conectivos: '#94a3b8'
 };
 
-// Estado da aplicação
+// Armazenamento local seguro e tolerante a falhas
+const STORAGE_KEYS = {
+  MODE: 'universo_mode',
+  BALANCE: 'universo_balance',
+  TRACE: 'universo_trace',
+  PAUSED: 'universo_paused'
+};
+
+const storage = {
+  get(key, fallback = null) {
+    try {
+      const v = localStorage.getItem(key);
+      return v !== null ? v : fallback;
+    } catch (_) {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, String(value));
+    } catch (_) {}
+  }
+};
+
+// Presets da Balança de Tokens
+const BALANCE_PRESETS = {
+  detailed: {
+    id: 'detailed',
+    label: '📝 Pergunta Detalhada',
+    maxPromptTokens: 1500,
+    maxChars: 6000,
+    maxTokens: 60,
+    tokenCapacityDesc: 'Prévia · até 60 tokens'
+  },
+  balanced: {
+    id: 'balanced',
+    label: '⚖️ Equilibrado',
+    maxPromptTokens: 900,
+    maxChars: 3600,
+    maxTokens: 140,
+    tokenCapacityDesc: 'Prévia · até 140 tokens'
+  },
+  expanded: {
+    id: 'expanded',
+    label: '💡 Resposta Expandida',
+    maxPromptTokens: 400,
+    maxChars: 1600,
+    maxTokens: 260,
+    tokenCapacityDesc: 'Prévia · até 260 tokens'
+  }
+};
+
+// Cor dourada e constante para Linha da Resposta (sinapse ativa)
+const TRACE_GOLD = new THREE.Color('#ffc83b');
+
+// Estado da aplicação com persistência
 let version = 0;
 let answerVersion = 0;
 let currentText = '';
-let currentMode = 'local'; // 'local' | 'demo'
+
+let currentMode = storage.get(STORAGE_KEYS.MODE, 'local');
+if (currentMode !== 'local' && currentMode !== 'demo') currentMode = 'local';
+
+let currentPreset = storage.get(STORAGE_KEYS.BALANCE, 'balanced');
+if (!BALANCE_PRESETS[currentPreset]) currentPreset = 'balanced';
+
+let traceActive = storage.get(STORAGE_KEYS.TRACE) === 'true';
+
+const savedPaused = storage.get(STORAGE_KEYS.PAUSED);
+let paused = savedPaused !== null
+  ? savedPaused === 'true'
+  : (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false);
+
 let inputTimer = null;
 let pauseTimer = null;
-let paused = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
 let records = [];
 let measurement = {};
 let pendingGraph = null;
@@ -63,17 +131,32 @@ let drag = null;
 let moved = false;
 let focus = null;
 
-// Hash determinístico para dispersão espacial dos nós
+// Hash determinístico para dispersão espacial e cores determinísticas
 function hash(s) {
   let n = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    n = Math.imul(n ^ s.charCodeAt(i), 16777619);
+  const str = String(s);
+  for (let i = 0; i < str.length; i++) {
+    n = Math.imul(n ^ str.charCodeAt(i), 16777619);
   }
   return n >>> 0;
 }
 
+// Retorna a cor do grupo semântico ou gera cor HSL determinística estável para novos grupos
+function getGroupColor(group) {
+  if (!group) return colors.contexto;
+  if (colors[group]) return colors[group];
+  const h = hash(group);
+  const hue = h % 360;
+  const sat = 65 + (h % 20); // 65% a 85%
+  const light = 68 + ((h >>> 8) % 15); // 68% a 83% para alto contraste no tema escuro
+  const dynamicColor = `hsl(${hue}, ${sat}%, ${light}%)`;
+  colors[group] = dynamicColor;
+  return dynamicColor;
+}
+
 // Coordenadas tridimensionais calculadas para estabilidade espacial
 function getNodePosition(n) {
+  getGroupColor(n.group); // garante registro na paleta colors
   const keys = Object.keys(colors);
   const g = keys.indexOf(n.group);
   const a = (g >= 0 ? g : 5) * 2.39996;
@@ -86,7 +169,7 @@ function getNodePosition(n) {
 }
 
 // Renderiza o rótulo da palavra em sprite de alta nitidez
-function createLabelSprite(text, color, weight) {
+function createLabelSprite(text, color, weight, isSubtle = false) {
   const c = document.createElement('canvas');
   c.width = 512;
   c.height = 96;
@@ -105,7 +188,10 @@ function createLabelSprite(text, color, weight) {
     depthTest: false
   });
   const sprite = new THREE.Sprite(material);
-  const scale = 0.85 + (weight || 0.5) * 0.9;
+  let scale = 0.85 + (weight || 0.5) * 0.9;
+  if (isSubtle) {
+    scale *= 0.65; // Redução de ~35% para conectivos estruturais
+  }
   sprite.scale.set(3.0 * scale, 0.563 * scale, 1);
   return { sprite, scale };
 }
@@ -135,11 +221,12 @@ function applyGraph(graphData) {
   // 2. Adição ou atualização de nós
   for (const n of graphData.nodes) {
     let obj = nodes.get(n.id);
+    const nodeColor = getGroupColor(n.group);
     const targetPos = getNodePosition(n);
+    const isSubtle = n.group === 'conectivos';
 
     if (!obj) {
-      const nodeColor = colors[n.group] || colors.contexto;
-      const { sprite, scale } = createLabelSprite(n.id, nodeColor, n.weight);
+      const { sprite, scale } = createLabelSprite(n.id, nodeColor, n.weight, isSubtle);
       root.add(sprite);
       obj = { sprite, target: targetPos, data: n, baseScale: scale };
       sprite.position.copy(targetPos).multiplyScalar(0.6);
@@ -148,7 +235,10 @@ function applyGraph(graphData) {
     } else {
       obj.data = n;
       obj.target.copy(targetPos);
-      const scale = 0.85 + (n.weight || 0.5) * 0.9;
+      let scale = 0.85 + (n.weight || 0.5) * 0.9;
+      if (isSubtle) {
+        scale *= 0.65;
+      }
       obj.baseScale = scale;
       obj.sprite.scale.set(3.0 * scale, 0.563 * scale, 1);
     }
@@ -174,11 +264,13 @@ function applyGraph(graphData) {
         sourceNode.sprite.position.clone(),
         targetNode.sprite.position.clone()
       ]);
-      const lineColor = colors[sourceNode.data.group] || '#95abbf';
+      const lineColorStr = getGroupColor(sourceNode.data.group);
+      const baseColor = new THREE.Color(lineColorStr);
+      const isSequenceReply = (e.kind === 'sequência na resposta');
       const lineMat = new THREE.LineBasicMaterial({
-        color: lineColor,
+        color: (traceActive && isSequenceReply) ? TRACE_GOLD.clone() : baseColor.clone(),
         transparent: true,
-        opacity: 0.15,
+        opacity: (traceActive && isSequenceReply) ? 0.70 : 0.15,
         depthWrite: false
       });
       const line = new THREE.Line(geo, lineMat);
@@ -186,7 +278,9 @@ function applyGraph(graphData) {
         source: e.source,
         target: e.target,
         sourceNode,
-        targetNode
+        targetNode,
+        kind: e.kind || '',
+        baseColor: baseColor
       };
       root.add(line);
       edgeObjects.push(line);
@@ -203,7 +297,7 @@ function applyGraph(graphData) {
   $('legend').replaceChildren(...groups.map(g => {
     const s = document.createElement('span');
     s.textContent = g;
-    s.style.setProperty('--color', colors[g] || colors.contexto);
+    s.style.setProperty('--color', getGroupColor(g));
     return s;
   }));
 }
@@ -223,8 +317,8 @@ new ResizeObserver(resize).observe(stage);
 window.addEventListener('resize', resize);
 resize();
 
-// Loop de animação contínuo a 60 FPS com lerp suave
-function frame() {
+// Loop de animação contínuo a 60 FPS com lerp suave e efeito sinapse neural
+function frame(time = 0) {
   requestAnimationFrame(frame);
   if (!renderer || document.hidden) return;
 
@@ -240,11 +334,28 @@ function frame() {
   // Atualização suave das posições e opacidades dos nós
   for (const o of nodes.values()) {
     o.sprite.position.lerp(o.target, 0.08);
-    const targetOpacity = (focus && focus !== o.data.id) ? 0.35 : 1.0;
+
+    let targetOpacity = 1.0;
+    if (focus) {
+      targetOpacity = (focus === o.data.id) ? 1.0 : 0.35;
+    } else if (traceActive) {
+      if (o.data.origin === 'resposta') {
+        targetOpacity = 1.0;
+      } else if (o.data.origin === 'vocabulário demonstrativo') {
+        targetOpacity = 0.30;
+      } else {
+        targetOpacity = 0.90;
+      }
+    } else {
+      targetOpacity = 1.0;
+    }
+
     o.sprite.material.opacity += (targetOpacity - o.sprite.material.opacity) * 0.15;
   }
 
   // Atualização direta das arestas sem alocações em tempo real
+  const pulseOpacity = 0.70 + 0.30 * Math.sin(time * 0.005);
+
   for (let i = 0; i < edgeObjects.length; i++) {
     const edge = edgeObjects[i];
     const a = edge.userData.sourceNode.sprite.position;
@@ -254,10 +365,21 @@ function frame() {
     pos.setXYZ(1, b.x, b.y, b.z);
     pos.needsUpdate = true;
 
-    const targetEdgeOpacity = focus
-      ? ((edge.userData.source === focus || edge.userData.target === focus) ? 0.6 : 0.04)
-      : 0.15;
-    edge.material.opacity += (targetEdgeOpacity - edge.material.opacity) * 0.15;
+    if (traceActive) {
+      if (edge.userData.kind === 'sequência na resposta') {
+        edge.material.color.copy(TRACE_GOLD);
+        edge.material.opacity = pulseOpacity;
+      } else {
+        edge.material.color.copy(edge.userData.baseColor);
+        edge.material.opacity += (0.035 - edge.material.opacity) * 0.15;
+      }
+    } else {
+      edge.material.color.copy(edge.userData.baseColor);
+      const targetEdgeOpacity = focus
+        ? ((edge.userData.source === focus || edge.userData.target === focus) ? 0.6 : 0.04)
+        : 0.15;
+      edge.material.opacity += (targetEdgeOpacity - edge.material.opacity) * 0.15;
+    }
   }
 
   renderer.render(scene, camera);
@@ -344,21 +466,35 @@ $('reset').onclick = () => {
   $('inspector').hidden = true;
 };
 
+// Controle de Pausa da Animação
 function updatePauseButton() {
   $('pause').textContent = paused ? 'Retomar movimento' : 'Pausar movimento';
   $('pause').setAttribute('aria-pressed', String(paused));
 }
-updatePauseButton();
 
 $('pause').onclick = () => {
   paused = !paused;
+  storage.set(STORAGE_KEYS.PAUSED, paused);
   updatePauseButton();
 };
 
+// Controle do Botão Linha da Resposta (Trace)
+function updateTraceButton() {
+  const btn = $('highlight-trace');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', String(traceActive));
+  btn.classList.toggle('active', traceActive);
+}
+
+$('highlight-trace').onclick = () => {
+  traceActive = !traceActive;
+  storage.set(STORAGE_KEYS.TRACE, traceActive);
+  updateTraceButton();
+};
+
 // Alternância de Modo: Modelo Local vs Demonstração
-function setMode(newMode) {
-  currentMode = newMode;
-  if (currentMode === 'local') {
+function applyModeUI(mode) {
+  if (mode === 'local') {
     $('btn-mode-local').classList.add('active');
     $('btn-mode-local').setAttribute('aria-pressed', 'true');
     $('btn-mode-demo').classList.remove('active');
@@ -371,12 +507,50 @@ function setMode(newMode) {
     $('btn-mode-local').setAttribute('aria-pressed', 'false');
     $('notice').textContent = 'Modo Demonstração ativo. Navegação 3D sem necessidade do modelo em execução.';
   }
+}
+
+function setMode(newMode) {
+  currentMode = newMode;
+  storage.set(STORAGE_KEYS.MODE, currentMode);
+  applyModeUI(currentMode);
   health();
   submit();
 }
 
 $('btn-mode-local').onclick = () => setMode('local');
 $('btn-mode-demo').onclick = () => setMode('demo');
+
+// Gerenciamento da Balança de Tokens
+function updateCharCounter() {
+  const currentLen = $('prompt').value.length;
+  const preset = BALANCE_PRESETS[currentPreset];
+  $('chars').textContent = `${currentLen} / ${preset.maxChars} (até ~${preset.maxPromptTokens} tokens)`;
+}
+
+function setBalancePreset(presetId, triggerSubmit = true) {
+  if (!BALANCE_PRESETS[presetId]) return;
+  currentPreset = presetId;
+  storage.set(STORAGE_KEYS.BALANCE, currentPreset);
+
+  const preset = BALANCE_PRESETS[presetId];
+  $('prompt').maxLength = preset.maxChars;
+  updateCharCounter();
+  $('token-capacity').textContent = preset.tokenCapacityDesc;
+
+  for (const btn of document.querySelectorAll('.balance-btn')) {
+    const isActive = (btn.dataset.preset === presetId);
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', String(isActive));
+  }
+
+  if (triggerSubmit && $('prompt').value.trim()) {
+    submit();
+  }
+}
+
+for (const btn of document.querySelectorAll('.balance-btn')) {
+  btn.onclick = () => setBalancePreset(btn.dataset.preset);
+}
 
 // Lista de palavras gramaticais/funcionais para classificar candidatos
 const functionalTokens = new Set(
@@ -493,7 +667,7 @@ async function streamPost(path, body, signal, onEvent) {
   }
 }
 
-// Submissão do texto digitado
+// Submissão do texto digitado com parâmetros dinâmicos da balança de tokens
 async function submit(text = $('prompt').value) {
   version++;
   const requestVersion = version;
@@ -534,9 +708,19 @@ async function submit(text = $('prompt').value) {
   if (requestAbort) requestAbort.abort();
   requestAbort = new AbortController();
   answerVersion = requestVersion;
+
+  const preset = BALANCE_PRESETS[currentPreset];
+  const requestStartTime = performance.now();
+  let firstTokenTime = null;
+  let chunkCount = 0;
+
   measurement = {
     version: requestVersion,
     mode: currentMode,
+    preset: currentPreset,
+    max_tokens: preset.maxTokens,
+    max_prompt_tokens: preset.maxPromptTokens,
+    trace_active: traceActive,
     started_at: new Date().toISOString()
   };
 
@@ -554,12 +738,21 @@ async function submit(text = $('prompt').value) {
   try {
     await streamPost(
       '/api/generate',
-      { text, mode: currentMode },
+      {
+        text,
+        mode: currentMode,
+        max_tokens: preset.maxTokens,
+        max_prompt_tokens: preset.maxPromptTokens
+      },
       requestAbort.signal,
       (name, result) => {
         if (requestVersion !== version) return;
 
         if (name === 'chunk') {
+          if (firstTokenTime === null) {
+            firstTokenTime = performance.now();
+          }
+          chunkCount++;
           $('answer').textContent += result.text || '';
           $('generation-state').textContent = currentMode === 'demo' ? 'Exibindo demonstração…' : 'Gerando resposta…';
           candidates(result.candidates || []);
@@ -571,17 +764,40 @@ async function submit(text = $('prompt').value) {
         }
 
         if (name === 'done') {
+          const endTime = performance.now();
+          const ttft_ms = firstTokenTime !== null ? Math.round(firstTokenTime - requestStartTime) : null;
+          const totalDurationSec = Math.max(0.001, (endTime - requestStartTime) / 1000);
+          const outTokens = result.output_tokens != null
+            ? result.output_tokens
+            : (result.answer ? result.answer.trim().split(/\s+/).length : chunkCount);
+          const tokens_s = (outTokens && totalDurationSec > 0)
+            ? Math.round((outTokens / totalDurationSec) * 10) / 10
+            : null;
+
           $('answer').textContent = result.answer || $('answer').textContent;
           $('answer-version').textContent = `v${requestVersion} · atual`;
           $('generation-state').textContent = 'Prévia concluída · continue escrevendo';
           $('tokens').textContent = result.text_tokens != null ? result.text_tokens : '—';
-          $('speed').textContent = result.words_s != null ? `${result.words_s} palavras/s` : '—';
+          $('speed').textContent = result.words_s != null
+            ? `${result.words_s} palavras/s`
+            : (tokens_s ? `${tokens_s} tokens/s` : '—');
           candidates(result.candidates || []);
           if (result.graph) {
             applyGraph(result.graph);
           }
           $('graph-version').textContent = '';
-          records.push({ ...measurement, ...result });
+
+          const recordEntry = {
+            ...measurement,
+            preset: currentPreset,
+            max_tokens: preset.maxTokens,
+            max_prompt_tokens: preset.maxPromptTokens,
+            trace_active: traceActive,
+            ttft_ms,
+            tokens_s,
+            ...result
+          };
+          records.push(recordEntry);
           records = records.slice(-100);
         }
       }
@@ -598,7 +814,7 @@ async function submit(text = $('prompt').value) {
 
 // Ouvintes de entrada no campo de texto
 $('prompt').addEventListener('input', e => {
-  $('chars').textContent = `${e.target.value.length} / 4000`;
+  updateCharCounter();
   clearTimeout(pauseTimer);
   if (e.isComposing) return;
 
@@ -625,7 +841,7 @@ $('prompt').addEventListener('compositionend', () => {
 for (const b of document.querySelectorAll('[data-example]')) {
   b.onclick = () => {
     $('prompt').value = b.dataset.example;
-    $('chars').textContent = `${$('prompt').value.length} / 4000`;
+    updateCharCounter();
     clearTimeout(inputTimer);
     clearTimeout(pauseTimer);
     submit();
@@ -633,10 +849,21 @@ for (const b of document.querySelectorAll('[data-example]')) {
   };
 }
 
-// Exportação de medições JSON
+// Exportação de medições JSON com telemetria detalhada
 $('export').onclick = () => {
+  const exportPayload = {
+    prototype: '0.1',
+    exported_at: new Date().toISOString(),
+    session_config: {
+      mode: currentMode,
+      preset: currentPreset,
+      trace_active: traceActive,
+      paused: paused
+    },
+    records
+  };
   const blob = new Blob(
-    [JSON.stringify({ prototype: '0.1', records }, null, 2)],
+    [JSON.stringify(exportPayload, null, 2)],
     { type: 'application/json' }
   );
   const url = URL.createObjectURL(blob);
@@ -675,11 +902,15 @@ async function health() {
   }
 }
 
-// Execução inicial
+// Execução inicial com restauração de preferências salvas
+applyModeUI(currentMode);
+setBalancePreset(currentPreset, false);
+updateTraceButton();
+updatePauseButton();
 health();
 setInterval(health, 15000);
 
-// Disparo inicial se houver texto prévio
+// Disparo inicial se houver texto prévio no carregamento
 setTimeout(() => {
   if ($('prompt').value && $('prompt').value !== currentText) {
     submit();

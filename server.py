@@ -50,43 +50,126 @@ app = FastAPI(
 )
 INFERENCE_LOCK = asyncio.Lock()
 
-STOP = set(
-    'a o as os um uma uns umas de do da dos das em no na nos nas e ou que para por com como se '
-    'eu você voce ele ela nós nos eles elas quero qual quais sobre é são ao me meu minha seu sua '
-    'isso esse essa este esta aquele aquela aqui ali lá muito mais menos bem mal sempre nunca'.split()
-)
+STOP = set()
+
+CONNECTIVES = {
+    # Preposições e contrações
+    'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'nos', 'nas',
+    'por', 'pelo', 'pela', 'pelos', 'pelas', 'para', 'pra', 'com', 'sem',
+    'sob', 'sobre', 'entre', 'até', 'após', 'desde', 'contra', 'perante',
+    'ao', 'aos', 'à', 'às', 'dum', 'duma', 'num', 'numa',
+    # Artigos
+    'a', 'o', 'as', 'os', 'um', 'uma', 'uns', 'umas',
+    # Conjunções
+    'que', 'se', 'e', 'ou', 'mas', 'porque', 'porquê', 'pois', 'como',
+    'embora', 'portanto', 'contudo', 'todavia', 'entretanto', 'logo',
+    'assim', 'caso', 'quando', 'enquanto', 'conforme', 'segundo',
+    # Pronomes estruturais e demonstrativos
+    'eu', 'tu', 'ele', 'ela', 'nós', 'vós', 'eles', 'elas', 'você', 'vocês', 'voce',
+    'me', 'te', 'se', 'lhe', 'lhes', 'nos', 'vos', 'mim', 'ti', 'si',
+    'este', 'esta', 'estes', 'estas', 'esse', 'essa', 'esses', 'essas',
+    'aquele', 'aquela', 'aqueles', 'aquelas', 'isto', 'isso', 'aquilo',
+    'meu', 'minha', 'meus', 'minhas', 'teu', 'tua', 'teus', 'tuas',
+    'seu', 'sua', 'seus', 'suas', 'nosso', 'nossa', 'nossos', 'nossas',
+    'qual', 'quais', 'quem', 'cujo', 'cuja', 'cujos', 'cujas', 'onde',
+    # Advérbios estruturais e de ligação
+    'não', 'sim', 'já', 'muito', 'mais', 'menos', 'bem', 'mal',
+    'sempre', 'nunca', 'ainda', 'também', 'talvez', 'aqui', 'ali', 'lá',
+    # Verbos de ligação e auxiliares comuns
+    'é', 'são', 'era', 'eram', 'foi', 'foram', 'ser', 'sendo', 'seja', 'sejam', 'será', 'serão',
+    'está', 'estão', 'estava', 'estavam', 'esteve', 'estar', 'estando', 'esteja', 'estejam',
+    'tem', 'têm', 'tinha', 'tinham', 'teve', 'ter', 'tendo', 'tenha', 'tenham',
+    'há', 'havia', 'houve', 'haver', 'havendo'
+}
 
 GROUPS = {
     'tecnologia': [
         'inteligência', 'artificial', 'modelo', 'token', 'tokens', 'rede', 'neural', 'dados',
         'algoritmo', 'computador', 'ia', 'llm', 'código', 'software', 'aprendizado', 'máquina',
-        'treinamento', 'padrão', 'probabilidade', 'informação', 'parâmetros', 'atenção', 'vetor'
+        'treinamento', 'padrão', 'probabilidade', 'informação', 'parâmetros', 'atenção', 'vetor',
+        'hardware', 'servidor', 'digital', 'automação', 'sistema'
     ],
     'linguagem': [
         'linguagem', 'palavra', 'palavras', 'texto', 'leitura', 'escrita', 'fala', 'significado',
-        'contexto', 'português', 'inglês', 'comunicação', 'semântica', 'frase', 'pergunta',
-        'resposta', 'interpretação', 'vocabulário', 'gramática', 'sentido', 'expressão', 'sintaxe'
+        'contexto', 'português', 'inglês', 'semântica', 'frase', 'pergunta', 'resposta',
+        'interpretação', 'vocabulário', 'gramática', 'sentido', 'expressão', 'sintaxe', 'discurso'
     ],
     'ciência': [
-        'ciência', 'cérebro', 'memória', 'neurônio', 'energia', 'universo', 'física', 'pesquisa',
-        'hipótese', 'atenção', 'aprendizagem', 'conhecimento', 'processo', 'análise', 'raciocínio',
-        'resultado', 'teoria', 'evolução', 'complexidade', 'descoberta'
+        'ciência', 'pesquisa', 'hipótese', 'teoria', 'experimento', 'método', 'física', 'química',
+        'biologia', 'evolução', 'energia', 'átomo', 'molécula', 'laboratório', 'descoberta',
+        'análise', 'evidência', 'matemática', 'cálculo', 'complexidade'
+    ],
+    'mente': [
+        'mente', 'cérebro', 'pensamento', 'consciência', 'memória', 'neurônio', 'cognição',
+        'psicologia', 'percepção', 'raciocínio', 'ideia', 'emoção', 'sentimento', 'inteligência',
+        'aprendizagem', 'imaginação', 'intuição', 'compreensão'
+    ],
+    'natureza': [
+        'natureza', 'ambiente', 'planeta', 'terra', 'vida', 'animal', 'planta', 'floresta',
+        'ecologia', 'clima', 'água', 'rio', 'mar', 'oceano', 'fauna', 'flora', 'ecossistema',
+        'sustentabilidade', 'árvore', 'bioma', 'biodiversidade'
+    ],
+    'sociedade': [
+        'sociedade', 'cultura', 'comunidade', 'povo', 'humano', 'humanidade', 'cidadão',
+        'cidadania', 'história', 'tradição', 'política', 'população', 'governo', 'democracia',
+        'social', 'civilização', 'coletivo', 'identidade', 'público'
+    ],
+    'economia': [
+        'economia', 'mercado', 'dinheiro', 'moeda', 'preço', 'valor', 'custo', 'investimento',
+        'finanças', 'capital', 'comércio', 'empresa', 'produção', 'consumo', 'crédito',
+        'banco', 'inflação', 'renda', 'trabalho', 'negócio'
+    ],
+    'filosofia': [
+        'filosofia', 'ética', 'moral', 'existência', 'verdade', 'razão', 'lógica', 'epistemologia',
+        'ontologia', 'conhecimento', 'sabedoria', 'justiça', 'ser', 'metafísica', 'crítica',
+        'virtude', 'reflexão', 'princípio', 'pensador'
+    ],
+    'arte': [
+        'arte', 'música', 'pintura', 'escultura', 'design', 'estética', 'beleza', 'criatividade',
+        'poesia', 'cinema', 'teatro', 'dança', 'literatura', 'artista', 'harmonia', 'ritmo',
+        'cor', 'obra', 'expressão', 'estilo'
+    ],
+    'saúde': [
+        'saúde', 'corpo', 'medicina', 'médico', 'doença', 'cura', 'tratamento', 'bem-estar',
+        'exercício', 'alimentação', 'nutrição', 'imunidade', 'terapia', 'sono', 'hospital',
+        'prevenção', 'diagnóstico', 'paciente', 'vitalidade'
     ],
     'viagem': [
         'viagem', 'viajar', 'japão', 'primavera', 'cerejeiras', 'roteiro', 'cultura', 'cidade',
         'clima', 'tóquio', 'paris', 'hotel', 'passagem', 'destino', 'turismo', 'paisagem',
-        'tradição', 'estação', 'mundo'
+        'tradição', 'estação', 'mundo', 'bagagem', 'voo', 'aventura'
     ],
     'cotidiano': [
-        'trabalho', 'vida', 'pessoa', 'pessoas', 'tempo', 'dia', 'casa', 'saúde', 'alimentação',
-        'sono', 'rotina', 'família', 'receita', 'bolo', 'chocolate', 'cozinha', 'ingrediente',
-        'hábito', 'bem-estar', 'experiência'
+        'cotidiano', 'rotina', 'vida', 'pessoa', 'pessoas', 'tempo', 'dia', 'casa', 'família',
+        'bolo', 'chocolate', 'cozinha', 'ingrediente', 'hábito', 'experiência', 'manhã',
+        'noite', 'tarefa', 'horário', 'descanso'
+    ],
+    'esporte': [
+        'esporte', 'futebol', 'jogo', 'atleta', 'treino', 'competição', 'partida', 'campeonato',
+        'vitória', 'corrida', 'natação', 'físico', 'ginástica', 'time', 'bola', 'quadra',
+        'estádio', 'desempenho', 'modalidade'
+    ],
+    'direito': [
+        'direito', 'lei', 'justiça', 'norma', 'tribunal', 'juiz', 'advogado', 'constituição',
+        'processo', 'crime', 'pena', 'dever', 'legal', 'jurídico', 'regra', 'contrato',
+        'legislação', 'código', 'ordem'
+    ],
+    'espaço': [
+        'espaço', 'universo', 'astro', 'astronomia', 'estrela', 'galáxia', 'planeta', 'lua',
+        'sol', 'órbita', 'gravidade', 'foguete', 'telescópio', 'cosmo', 'satélite',
+        'solar', 'interestelar', 'constelação'
+    ],
+    'comunicação': [
+        'comunicação', 'mídia', 'mensagem', 'conversa', 'diálogo', 'notícia', 'jornalismo',
+        'informação', 'rede', 'internet', 'transmissão', 'contato', 'relato', 'compartilhar',
+        'voz', 'canal', 'interação', 'emissor', 'receptor'
     ],
 }
 
 WORDS_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", re.UNICODE)
 CANDIDATE_RE = re.compile(r'[A-Za-zÀ-ÿ]{2,}')
 GROUPS_SET = {g: set(words_list) for g, words_list in GROUPS.items()}
+ALL_GROUP_WORDS = set().union(*GROUPS_SET.values())
 
 
 def words(text: str):
@@ -111,13 +194,47 @@ def graph(text: str, answer: str = ''):
     """
     Heurística lexical determinística e rápida para alimentar o Three.js.
     Destaca termos do texto de entrada e da resposta gerada, organizando conexões por
-    grupos conceituais e sequências de frases sem sobrecarregar a CPU.
+    grupos conceituais, sequências de frases e clusters dinâmicos com conectivos estruturais.
     """
-    source = [w for w in words(text) if w not in STOP and len(w) > 2]
-    reply = [w for w in words(answer) if w not in STOP and len(w) > 3]
+    source = [w for w in words(text) if (w in CONNECTIVES or (w not in STOP and (len(w) > 2 or w in ALL_GROUP_WORDS)))]
+    reply = [w for w in words(answer) if (w in CONNECTIVES or (w not in STOP and (len(w) > 2 or w in ALL_GROUP_WORDS)))]
 
     # Ampla cobertura de termos da resposta para enriquecer a exploração visual
     keys = list(dict.fromkeys(source + reply))[-110:]
+
+    # Identificação de termos desconhecidos para formação de cluster dinâmico emergente por oração
+    unknown_keys = [w for w in keys if w not in CONNECTIVES and not any(w in s for s in GROUPS_SET.values())]
+    dynamic_group_map = {}
+    if unknown_keys:
+        full_text = f"{text}\n{answer}"
+        clauses = [c.strip() for c in re.split(r'[.!?;:\n]+', full_text) if c.strip()]
+        adj = {w: set() for w in unknown_keys}
+        for clause in clauses:
+            clause_words = set(words(clause))
+            found = [w for w in unknown_keys if w in clause_words]
+            for i, w1 in enumerate(found):
+                for w2 in found[i + 1:]:
+                    adj[w1].add(w2)
+                    adj[w2].add(w1)
+
+        visited = set()
+        for w in unknown_keys:
+            if w not in visited:
+                comp = []
+                queue = [w]
+                visited.add(w)
+                while queue:
+                    curr = queue.pop(0)
+                    comp.append(curr)
+                    for neighbor in adj[curr]:
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            queue.append(neighbor)
+                root = min(comp, key=lambda x: keys.index(x))
+                group_name = f'tema: {root}'
+                for member in comp:
+                    dynamic_group_map[member] = group_name
+
     active = [g for g, vocab_set in GROUPS_SET.items() if any(w in vocab_set for w in source + reply)]
 
     expanded = []
@@ -126,33 +243,53 @@ def graph(text: str, answer: str = ''):
 
     nodes = []
     for w in keys:
-        g = next((g for g, vocab_set in GROUPS_SET.items() if w in vocab_set), 'contexto')
-        if w in source:
-            weight = min(1.0, 0.50 + 0.12 * source.count(w))
-            origin = 'entrada'
+        if w in CONNECTIVES:
+            g = 'conectivos'
+            weight = 0.22
+            origin = 'conectivo'
         else:
-            weight = min(0.95, 0.42 + 0.08 * reply.count(w))
-            origin = 'resposta'
+            g = next((group_name for group_name, vocab_set in GROUPS_SET.items() if w in vocab_set), None)
+            if g is None:
+                g = dynamic_group_map.get(w, f'tema: {w}')
+            if w in source:
+                weight = min(1.0, 0.50 + 0.12 * source.count(w))
+                origin = 'entrada'
+            else:
+                weight = min(0.95, 0.42 + 0.08 * reply.count(w))
+                origin = 'resposta'
         nodes.append(dict(id=w, group=g, weight=round(weight, 2), origin=origin))
 
     for w, g in expanded[:50]:
         nodes.append(dict(id=w, group=g, weight=0.25, origin='vocabulário demonstrativo'))
 
     edges = []
-    # Conexões por proximidade de grupo conceitual
+    seen_edges = set()
+
+    def add_edge(s: str, t: str, weight: float, kind: str):
+        if s == t:
+            return
+        pair = (s, t) if s < t else (t, s)
+        if pair in seen_edges:
+            return
+        seen_edges.add(pair)
+        edges.append(dict(source=s, target=t, weight=weight, kind=kind))
+
+    # Conexões por proximidade de grupo conceitual (ignora conectivos para não poluir os conceitos)
     for i, node in enumerate(nodes):
+        if node['group'] == 'conectivos':
+            continue
         peers = [n for n in nodes[:i] if n['group'] == node['group']][-4:]
         for peer in peers:
-            edges.append(dict(source=peer['id'], target=node['id'], weight=0.5, kind='grupo lexical'))
+            add_edge(peer['id'], node['id'], 0.5, 'grupo lexical')
 
     # Conexões por sequência natural das frases digitadas
     for a, b in zip(source, source[1:]):
-        if a != b and a in keys and b in keys:
-            edges.append(dict(source=a, target=b, weight=0.8, kind='sequência no texto'))
+        if a in keys and b in keys:
+            add_edge(a, b, 0.8, 'sequência no texto')
 
     for a, b in zip(reply, reply[1:]):
-        if a != b and a in keys and b in keys:
-            edges.append(dict(source=a, target=b, weight=0.65, kind='sequência na resposta'))
+        if a in keys and b in keys:
+            add_edge(a, b, 0.65, 'sequência na resposta')
 
     return dict(
         nodes=nodes,
@@ -185,23 +322,54 @@ async def api_graph(data: dict):
 async def api_generate(data: dict):
     """
     Geração em streaming HTTP Server-Sent Events (SSE).
-    Distribuição rebalanceada: prioriza respostas mais ricas em conceitos e nós (até 140 tokens),
-    com tolerância adequada para prompts de estudo.
+    Suporta balança dinâmica de tokens (max_tokens e max_prompt_tokens) e telemetria de inferência.
     """
     text = str(data.get('text', ''))[:4000]
     mode = 'demo' if data.get('mode') == 'demo' else 'local'
+
+    try:
+        max_tokens = int(data.get('max_tokens') or 140)
+        if max_tokens <= 0:
+            max_tokens = 140
+    except (ValueError, TypeError):
+        max_tokens = 140
+
+    try:
+        max_prompt_tokens = int(data.get('max_prompt_tokens') or 900)
+        if max_prompt_tokens <= 0:
+            max_prompt_tokens = 900
+    except (ValueError, TypeError):
+        max_prompt_tokens = 900
 
     def event(name, **payload) -> str:
         return f"event: {name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
     async def stream():
         if not text.strip():
-            yield event('done', answer='', graph=graph(''), candidates=[])
+            yield event(
+                'done',
+                answer='',
+                graph=graph(''),
+                candidates=[],
+                max_tokens_config=max_tokens,
+                ttft_ms=None,
+                output_tokens=0,
+                text_tokens=0,
+                words_s=None
+            )
             return
 
         started = time.perf_counter()
 
         if mode == 'demo':
+            prompt_words_count = len(words(text))
+            if prompt_words_count > max_prompt_tokens:
+                yield event(
+                    'error',
+                    message=f'Texto excede o limite configurado de {max_prompt_tokens} tokens. Ajuste na balança ou reduza a pergunta.'
+                )
+                return
+
             terms = [n['id'] for n in graph(text)['nodes'] if n['origin'] == 'entrada']
             destaque = ', '.join(terms[:6]) if terms else 'as palavras digitadas'
             answer = (
@@ -213,19 +381,24 @@ async def api_generate(data: dict):
                 yield event('chunk', text=fragment, candidates=[])
                 await asyncio.sleep(0.025)
 
+            elapsed = max(0.01, time.perf_counter() - started)
             yield event(
                 'done',
                 answer=answer,
                 graph=graph(text, answer),
                 candidates=[],
-                text_tokens=None,
-                words_s=None
+                max_tokens_config=max_tokens,
+                ttft_ms=None,
+                output_tokens=len(re.findall(r'\S+\s*', answer)),
+                text_tokens=prompt_words_count,
+                words_s=round(len(words(answer)) / elapsed, 1)
             )
             return
 
         answer = ''
         latest_candidates = []
         output_tokens = 0
+        ttft_ms = None
         client = get_client()
 
         try:
@@ -271,19 +444,19 @@ async def api_generate(data: dict):
             if not prompt_count:
                 prompt_count = len(words(text)) + 55
 
-            if prompt_count > 1000:
+            if prompt_count > max_prompt_tokens:
                 yield event(
                     'error',
-                    message='Texto muito longo para este protótipo. Mantenha a pergunta em até 1.000 tokens.'
+                    message=f'Texto excede o limite configurado de {max_prompt_tokens} tokens. Ajuste na balança ou reduza a pergunta.'
                 )
                 return
 
-            # Limite de tokens de saída balanceado: 140 tokens (rico em nós para o 3D)
+            # Limite de tokens de saída dinâmico configurado pela balança
             payload = dict(
                 model='local',
                 messages=messages,
                 stream=True,
-                max_tokens=140,
+                max_tokens=max_tokens,
                 temperature=0.7,
                 top_p=1.0,
                 top_k=0,
@@ -313,6 +486,9 @@ async def api_generate(data: dict):
                         if logs:
                             output_tokens += len(logs)
                             latest_candidates = readable_candidates(logs[-1].get('top_logprobs', []))
+                        if fragment or logs:
+                            if ttft_ms is None:
+                                ttft_ms = round((time.perf_counter() - started) * 1000, 1)
                         if fragment:
                             answer += fragment
                             yield event('chunk', text=fragment, candidates=latest_candidates)
@@ -323,6 +499,8 @@ async def api_generate(data: dict):
                 answer=answer,
                 graph=graph(text, answer),
                 candidates=latest_candidates,
+                max_tokens_config=max_tokens,
+                ttft_ms=ttft_ms,
                 text_tokens=prompt_count or len(words(text)),
                 output_tokens=output_tokens,
                 words_s=round(len(words(answer)) / elapsed, 1) if answer else None

@@ -166,5 +166,99 @@ class ProtocolTests(unittest.TestCase):
                 self.assertIn('indisponível', error_events[0][1]['message'])
 
 
+    def test_balanca_tokens_limit_exceeded(self):
+        """Valida que texto excedendo max_prompt_tokens emite evento SSE de erro formatado."""
+        def client_factory(*args, **kwargs):
+            kwargs['transport'] = httpx.MockTransport(mock_llama_reply)
+            return _ORIGINAL_ASYNC_CLIENT(*args, **kwargs)
+
+        with patch.object(server.httpx, 'AsyncClient', client_factory), TestClient(server.app) as client:
+            # mock_llama_reply retorna 20 tokens no /tokenize. Com max_prompt_tokens=15, deve estourar.
+            payload = {'text': 'Pergunta teste', 'mode': 'local', 'max_prompt_tokens': 15}
+            with client.stream('POST', '/api/generate', json=payload) as resp:
+                lines = [line for line in resp.iter_lines() if line]
+                events = parse_sse_events(lines)
+                error_events = [e for e in events if e[0] == 'error']
+                self.assertEqual(len(error_events), 1)
+                self.assertIn('Texto excede o limite configurado de 15 tokens', error_events[0][1]['message'])
+                self.assertIn('Ajuste na balança ou reduza a pergunta', error_events[0][1]['message'])
+
+    def test_balanca_tokens_custom_preset_and_telemetry(self):
+        """Valida que max_tokens dinâmico é aceito e telemetria (ttft_ms, max_tokens_config) é emitida."""
+        captured_payloads = []
+
+        def tracking_mock_llama_reply(request: httpx.Request):
+            if request.url.path == '/v1/chat/completions':
+                captured_payloads.append(json.loads(request.read()))
+            return mock_llama_reply(request)
+
+        def client_factory(*args, **kwargs):
+            kwargs['transport'] = httpx.MockTransport(tracking_mock_llama_reply)
+            return _ORIGINAL_ASYNC_CLIENT(*args, **kwargs)
+
+        with patch.object(server.httpx, 'AsyncClient', client_factory), TestClient(server.app) as client:
+            payload = {'text': 'Explique redes neurais', 'mode': 'local', 'max_tokens': 60, 'max_prompt_tokens': 400}
+            with client.stream('POST', '/api/generate', json=payload) as resp:
+                lines = [line for line in resp.iter_lines() if line]
+                events = parse_sse_events(lines)
+                done_events = [e for e in events if e[0] == 'done']
+                self.assertEqual(len(done_events), 1)
+                done_data = done_events[0][1]
+
+                # Telemetria no evento done
+                self.assertEqual(done_data['max_tokens_config'], 60)
+                self.assertIsNotNone(done_data['ttft_ms'])
+                self.assertGreaterEqual(done_data['ttft_ms'], 0)
+                self.assertEqual(done_data['output_tokens'], 4)
+                self.assertEqual(done_data['text_tokens'], 20)
+                self.assertIsNotNone(done_data['words_s'])
+
+                # Validação do payload repassado ao llama.cpp
+                self.assertEqual(len(captured_payloads), 1)
+                self.assertEqual(captured_payloads[0]['max_tokens'], 60)
+
+    def test_connectives_in_graph(self):
+        """Valida que conectivos não são descartados e recebem atributos visuais adequados."""
+        res = server.graph('A inteligência artificial e as redes neurais sobre o cérebro')
+        nodes_by_id = {n['id']: n for n in res['nodes']}
+
+        # Conectivos presentes na frase
+        for conn in ['e', 'sobre']:
+            self.assertIn(conn, nodes_by_id)
+            self.assertEqual(nodes_by_id[conn]['group'], 'conectivos')
+            self.assertEqual(nodes_by_id[conn]['weight'], 0.22)
+            self.assertEqual(nodes_by_id[conn]['origin'], 'conectivo')
+
+        # Conceitos continuam preservados com grupos semânticos
+        self.assertIn('inteligência', nodes_by_id)
+        self.assertEqual(nodes_by_id['inteligência']['group'], 'tecnologia')
+
+    def test_16_groups_and_dynamic_clusters(self):
+        """Valida existência das 16 famílias universais e formação de cluster dinâmico para termos desconhecidos."""
+        expected_families = [
+            'tecnologia', 'linguagem', 'ciência', 'mente', 'natureza',
+            'sociedade', 'economia', 'filosofia', 'arte', 'saúde',
+            'viagem', 'cotidiano', 'esporte', 'direito', 'espaço', 'comunicação'
+        ]
+        for family in expected_families:
+            self.assertIn(family, server.GROUPS)
+        self.assertEqual(len(server.GROUPS), 16)
+
+        # Termos desconhecidos que coocorrem na mesma oração
+        res = server.graph('O axolote mexicano habita lagos peculiares.')
+        nodes_by_id = {n['id']: n for n in res['nodes']}
+
+        self.assertIn('axolote', nodes_by_id)
+        self.assertIn('mexicano', nodes_by_id)
+
+        # Devem ter sido agrupados em um cluster dinâmico emergente e não no genérico 'contexto'
+        group_axolote = nodes_by_id['axolote']['group']
+        group_mexicano = nodes_by_id['mexicano']['group']
+        self.assertTrue(group_axolote.startswith('tema: '))
+        self.assertEqual(group_axolote, group_mexicano)
+        self.assertNotEqual(group_axolote, 'contexto')
+
+
 if __name__ == '__main__':
     unittest.main()
+

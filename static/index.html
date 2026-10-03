@@ -28,10 +28,17 @@
       
       <div class="input-wrap">
         <label class="sr" for="prompt">Escreva sua pergunta</label>
-        <textarea id="prompt" rows="2" maxlength="4000" placeholder="O que você quer explorar? Comece a escrever…" spellcheck="false"></textarea>
+        <textarea id="prompt" rows="2" maxlength="3600" placeholder="O que você quer explorar? Comece a escrever…" spellcheck="false"></textarea>
         <div class="input-bottom">
-          <span id="chars">0 / 4000</span>
+          <span id="chars">0 / 3600 (até ~900 tokens)</span>
         </div>
+      </div>
+
+      <div class="balance-control" role="group" aria-label="Balança de tokens">
+        <span class="balance-label">BALANÇA DE TOKENS:</span>
+        <button id="balance-detailed" class="balance-btn" type="button" data-preset="detailed" aria-pressed="false" title="Entrada até ~1500 tokens / Resposta até 60 tokens">📝 Pergunta Detalhada</button>
+        <button id="balance-balanced" class="balance-btn active" type="button" data-preset="balanced" aria-pressed="true" title="Entrada até ~900 tokens / Resposta até 140 tokens">⚖️ Equilibrado</button>
+        <button id="balance-expanded" class="balance-btn" type="button" data-preset="expanded" aria-pressed="false" title="Entrada até ~400 tokens / Resposta rica até 260 tokens">💡 Resposta Expandida</button>
       </div>
       
       <p class="chat-note" id="input-status">Atualização automática · espaço + 250 ms</p>
@@ -51,6 +58,7 @@
           <span id="graph-version">Aguardando texto</span>
         </div>
         <div class="scene-controls">
+          <button id="highlight-trace" class="trace-btn" type="button" aria-pressed="false" title="Destaca a linha de pensamento e a sequência da resposta">✨ Linha da Resposta</button>
           <button id="pause" aria-pressed="false">Pausar movimento</button>
           <button id="reset">Recentralizar</button>
         </div>
