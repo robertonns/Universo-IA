@@ -174,7 +174,7 @@ function getGroupColor(group) {
   return dynamicColor;
 }
 
-// Coordenadas tridimensionais calculadas para estabilidade espacial
+// Coordenadas tridimensionais calculadas para estabilidade espacial e legibilidade
 function getNodePosition(n) {
   getGroupColor(n.group); // garante registro na paleta colors
   const keys = Object.keys(colors);
@@ -182,9 +182,9 @@ function getNodePosition(n) {
   const a = (g >= 0 ? g : 5) * 2.39996;
   const h = hash(n.id);
   return new THREE.Vector3(
-    Math.cos(a) * 4.4 + ((h % 997) / 997 - 0.5) * 4.2,
-    Math.sin(a) * 2.0 + (((h >>> 8) % 991) / 991 - 0.5) * 2.8,
-    (((h >>> 16) % 983) / 983 - 0.5) * 5.0
+    Math.cos(a) * 4.6 + ((h % 997) / 997 - 0.5) * 5.6,
+    Math.sin(a) * 2.2 + (((h >>> 8) % 991) / 991 - 0.5) * 3.6,
+    (((h >>> 16) % 983) / 983 - 0.5) * 5.5
   );
 }
 
@@ -334,8 +334,8 @@ function applyGraph(graphData) {
   $('nodes').textContent = `${nodesCount} / ${edgesCount}`;
   $('scene-empty').hidden = nodesCount > 0;
 
-  // 6. Legenda interativa com foco de dimensão por clique
-  const groups = Array.isArray(graphData.groups) ? graphData.groups : [];
+  // 6. Legenda interativa com foco de dimensão por clique (exclui conectivos)
+  const groups = (Array.isArray(graphData.groups) ? graphData.groups : []).filter(g => g !== 'conectivos');
   $('legend').replaceChildren(...groups.map(g => {
     const s = document.createElement('span');
     s.textContent = g;
@@ -347,12 +347,6 @@ function applyGraph(graphData) {
         activeDimension = null;
       } else {
         activeDimension = g;
-        // Se clicar na dimensão conectivos e eles estiverem ocultos, reativa-os
-        if (g === 'conectivos' && !connectivesVisible) {
-          connectivesVisible = true;
-          storage.set(STORAGE_KEYS.CONNECTIVES, true);
-          updateConnectivesButton();
-        }
       }
       for (const chip of $('legend').children) {
         chip.classList.toggle('active', chip.textContent === activeDimension);

@@ -48,6 +48,18 @@ app = FastAPI(
     description='Navegação tridimensional em modelo de linguagem',
     lifespan=lifespan
 )
+
+
+@app.middleware('http')
+async def add_no_cache_headers(request, call_next):
+    """Garante que arquivos estáticos e respostas nunca fiquem retidos no cache do navegador."""
+    response = await call_next(request)
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
 INFERENCE_LOCK = asyncio.Lock()
 
 STOP = set()
@@ -121,7 +133,7 @@ GROUPS = {
     ],
     'economia': [
         'economia', 'mercado', 'dinheiro', 'moeda', 'preço', 'valor', 'custo', 'investimento',
-        'finanças', 'capital', 'comércio', 'empresa', 'produção', 'consumo', 'crédito',
+        'finanças', 'capitalismo', 'comércio', 'empresa', 'produção', 'consumo', 'crédito',
         'banco', 'inflação', 'renda', 'trabalho', 'negócio'
     ],
     'filosofia': [
@@ -334,6 +346,10 @@ def graph(text: str, answer: str = ''):
             continue
         peers = [n for n in nodes[:i] if n['group'] == node['group']][-4:]
         for peer in peers:
+            # Evita criar arestas lexicais secundárias entre termos que já pertencem à mesma resposta formulada,
+            # mantendo o traçado da resposta estritamente linear e sem triângulos redundantes
+            if (peer['id'] in reply) and (node['id'] in reply):
+                continue
             add_edge(peer['id'], node['id'], 0.5, 'grupo lexical')
 
     # Conexões por sequência natural das frases digitadas na pergunta
@@ -358,11 +374,18 @@ def graph(text: str, answer: str = ''):
         if a in keys and b in keys:
             add_edge(a, b, 0.88, 'sequência na resposta', is_shortcut=True)
 
-    # Ordenação da legenda: conectivos primeiro (ou padrão), grupos semânticos estáveis no meio,
-    # e grupos dinâmicos ('conceito:', 'ação:', 'qualidade:', 'tema:') obrigatoriamente por último (à direita)
+    # Ordenação da legenda: grupos semânticos estáveis no meio,
+    # e grupos dinâmicos ('conceito:', 'ação:', 'qualidade:', 'tema:') obrigatoriamente por último (à direita).
+    # Conectivos são excluídos da legenda (possuem controle exclusivo no botão dedicado).
     all_groups = list(dict.fromkeys(n['group'] for n in nodes))
-    standard_groups = [g for g in all_groups if not any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:'))]
-    dynamic_groups = [g for g in all_groups if any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:'))]
+    standard_groups = [
+        g for g in all_groups
+        if not any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:')) and g != 'conectivos'
+    ]
+    dynamic_groups = [
+        g for g in all_groups
+        if any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:'))
+    ]
     sorted_groups = standard_groups + dynamic_groups
 
     return dict(

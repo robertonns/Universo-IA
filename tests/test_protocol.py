@@ -313,6 +313,19 @@ class ProtocolTests(unittest.TestCase):
             self.assertTrue(edge.get('is_shortcut'), f"Aresta {pair} deveria ser is_shortcut=True")
             self.assertEqual(edge['kind_id'], 'reply_sequence')
 
+        # Valida que NÃO existem arestas cruzadas redundantes (triângulos) entre palavras não consecutivas da resposta
+        cross_triangle_pair = tuple(sorted(['capital', 'brasília']))
+        self.assertNotIn(cross_triangle_pair, edges_map, f"Aresta cruzada {cross_triangle_pair} não deveria existir no grafo")
+
+        # Valida que 'conectivos' e domínios não relacionados (como 'economia') NÃO aparecem na legenda
+        self.assertNotIn('conectivos', res['groups'])
+        self.assertNotIn('economia', res['groups'])
+        self.assertIn('sociedade', res['groups'])
+
+        # Valida que 'capital' pertence exclusivamente a 'sociedade' e não a 'economia'
+        self.assertIn('capital', server.GROUPS['sociedade'])
+        self.assertNotIn('capital', server.GROUPS['economia'])
+
 
 if __name__ == '__main__':
     unittest.main()
