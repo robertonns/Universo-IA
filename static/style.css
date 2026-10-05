@@ -515,12 +515,24 @@ textarea::placeholder {
   }
 }
 
-#toggle-connectives[aria-pressed="false"] {
-  opacity: 0.55;
-  color: #718398;
-  border-color: #263342;
-  text-decoration: line-through;
-  text-decoration-color: #e55353;
+#toggle-connectives {
+  background: rgba(16, 24, 38, 0.75);
+  border: 1px solid #2e3d50;
+  color: var(--muted);
+}
+
+#toggle-connectives:hover {
+  border-color: #6b8caa;
+  color: var(--text);
+}
+
+#toggle-connectives.active,
+#toggle-connectives[aria-pressed="true"] {
+  background: rgba(20, 32, 46, 0.95);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 
 #graph-version {

@@ -93,9 +93,11 @@ let currentPromptTokens = parseInt(storage.get(STORAGE_KEYS.BALANCE_PROMPT, Stri
 let currentReplyTokens = parseInt(storage.get(STORAGE_KEYS.BALANCE_REPLY, String(initialPreset.maxTokens)), 10) || initialPreset.maxTokens;
 let currentSliderVal = parseInt(storage.get(STORAGE_KEYS.BALANCE_SLIDER, String(initialPreset.sliderValue)), 10) || initialPreset.sliderValue;
 
-let traceActive = storage.get(STORAGE_KEYS.TRACE) === 'true';
-let connectivesVisible = storage.get(STORAGE_KEYS.CONNECTIVES, 'true') !== 'false';
+let traceActive = false;
+let connectivesVisible = false;
 let activeDimension = null;
+storage.set(STORAGE_KEYS.TRACE, false);
+storage.set(STORAGE_KEYS.CONNECTIVES, false);
 
 const savedPaused = storage.get(STORAGE_KEYS.PAUSED);
 let paused = savedPaused !== null
@@ -1102,6 +1104,7 @@ $('export').onclick = () => {
       mode: currentMode,
       preset: currentPreset,
       trace_active: traceActive,
+      connectives_visible: connectivesVisible,
       paused: paused
     },
     records
