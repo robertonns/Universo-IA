@@ -234,7 +234,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(nodes_by_id['inteligência']['group'], 'tecnologia')
 
     def test_16_groups_and_dynamic_clusters(self):
-        """Valida existência das 16 famílias universais e formação de cluster dinâmico para termos desconhecidos."""
+        """Valida existência das 16 famílias universais, normalização morfológica e posicionamento dos clusters dinâmicos ao final da legenda."""
         expected_families = [
             'tecnologia', 'linguagem', 'ciência', 'mente', 'natureza',
             'sociedade', 'economia', 'filosofia', 'arte', 'saúde',
@@ -251,16 +251,35 @@ class ProtocolTests(unittest.TestCase):
         self.assertIn('axolote', nodes_by_id)
         self.assertIn('mexicano', nodes_by_id)
 
+        # Valida que grupos desconhecidos recebem prefixo morfológico padronizado ('conceito:', 'ação:', 'qualidade:')
+        axolote_group = nodes_by_id['axolote']['group']
+        self.assertTrue(
+            any(axolote_group.startswith(p) for p in ('conceito:', 'ação:', 'qualidade:')),
+            f"Grupo '{axolote_group}' não segue padrão de normalização morfológica"
+        )
+
+        # Valida ordenação da legenda: grupos dinâmicos devem estar no final (à direita)
+        groups = res['groups']
+        dynamic_indices = [i for i, g in enumerate(groups) if any(g.startswith(p) for p in ('conceito:', 'ação:', 'qualidade:', 'tema:'))]
+        standard_indices = [i for i, g in enumerate(groups) if not any(g.startswith(p) for p in ('conceito:', 'ação:', 'qualidade:', 'tema:'))]
+        if dynamic_indices and standard_indices:
+            self.assertGreater(min(dynamic_indices), max(standard_indices), "Grupos dinâmicos devem estar obrigatoriamente após os grupos estáveis")
+
     def test_reply_sequence_continuity(self):
-        """Valida que a linha da resposta possui precedência máxima e conecta todas as palavras da resposta de forma contínua."""
+        """Valida que a linha da resposta possui precedência máxima, conecta todas as palavras da resposta de forma contínua e gera atalhos de conteúdo quando conectivos estiverem ocultos."""
         res = server.graph('Qual é a capital do Brasil?', 'A capital do Brasil é Brasília.')
         nodes_by_id = {n['id']: n for n in res['nodes']}
         edges = res['edges']
 
-        # Todas as palavras da resposta devem estar presentes nos nós
+        # Todas as palavras da resposta devem estar presentes nos nós com flag in_reply
         answer_words = ['a', 'capital', 'do', 'brasil', 'é', 'brasília']
         for w in answer_words:
             self.assertIn(w, nodes_by_id)
+            self.assertTrue(nodes_by_id[w]['in_reply'], f"Nó '{w}' deveria ter in_reply=True")
+
+        # Sequência canônica da resposta emitida
+        self.assertIn('reply_sequence', res)
+        self.assertEqual(res['reply_sequence'], answer_words)
 
         # Mapeia arestas por par ordenado
         edges_map = {}
@@ -268,7 +287,7 @@ class ProtocolTests(unittest.TestCase):
             pair = tuple(sorted([e['source'], e['target']]))
             edges_map[pair] = e
 
-        # Pares sequenciais da resposta
+        # Pares sequenciais completos da resposta (com conectivos)
         expected_reply_pairs = [
             tuple(sorted(['a', 'capital'])),
             tuple(sorted(['capital', 'do'])),
@@ -281,6 +300,17 @@ class ProtocolTests(unittest.TestCase):
             self.assertIn(pair, edges_map, f"Aresta esperada {pair} ausente no grafo")
             edge = edges_map[pair]
             self.assertEqual(edge['kind'], 'sequência na resposta')
+            self.assertEqual(edge['kind_id'], 'reply_sequence')
+
+        # Pares sequenciais diretos de conteúdo (atalhos para quando conectivos estiverem ocultos)
+        shortcut_pairs = [
+            tuple(sorted(['capital', 'brasil'])),
+            tuple(sorted(['brasil', 'brasília']))
+        ]
+        for pair in shortcut_pairs:
+            self.assertIn(pair, edges_map, f"Aresta de atalho {pair} ausente no grafo")
+            edge = edges_map[pair]
+            self.assertTrue(edge.get('is_shortcut'), f"Aresta {pair} deveria ser is_shortcut=True")
             self.assertEqual(edge['kind_id'], 'reply_sequence')
 
 

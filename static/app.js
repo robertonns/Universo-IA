@@ -94,6 +94,10 @@ let currentReplyTokens = parseInt(storage.get(STORAGE_KEYS.BALANCE_REPLY, String
 let currentSliderVal = parseInt(storage.get(STORAGE_KEYS.BALANCE_SLIDER, String(initialPreset.sliderValue)), 10) || initialPreset.sliderValue;
 
 let traceActive = false;
+let trajectoryActive = false;
+let trajectoryStep = 0;
+let trajectoryTimer = null;
+let replySequence = [];
 let connectivesVisible = false;
 let activeDimension = null;
 storage.set(STORAGE_KEYS.TRACE, false);
@@ -218,6 +222,13 @@ function applyGraph(graphData) {
     graphData = { nodes: [], edges: [], groups: [] };
   }
 
+  if (Array.isArray(graphData.reply_sequence)) {
+    replySequence = graphData.reply_sequence;
+    if (trajectoryActive) {
+      trajectoryStep = 0;
+    }
+  }
+
   const ids = new Set(graphData.nodes.map(n => n.id));
 
   // 1. Liberação de nós obsoletos e descarte de recursos de GPU
@@ -269,49 +280,8 @@ function applyGraph(graphData) {
   }
   edgeObjects = [];
 
-  // 4. Criação de arestas normais e arestas-ponte (para ligação direta quando conectivos estiverem ocultos)
-  const allEdges = [...(graphData.edges || [])];
-  const incomingContentToConn = new Map();
-  const outgoingConnToContent = new Map();
-
-  for (const e of allEdges) {
-    const isSeq = e.kind_id === 'reply_sequence' || e.kind_id === 'prompt_sequence' || (e.kind && e.kind.includes('sequência'));
-    if (isSeq) {
-      const sNode = nodes.get(e.source);
-      const tNode = nodes.get(e.target);
-      if (!sNode || !tNode) continue;
-      const sConn = sNode.data.group === 'conectivos';
-      const tConn = tNode.data.group === 'conectivos';
-      if (!sConn && tConn) {
-        if (!incomingContentToConn.has(e.target)) incomingContentToConn.set(e.target, []);
-        incomingContentToConn.get(e.target).push(e.source);
-      } else if (sConn && !tConn) {
-        if (!outgoingConnToContent.has(e.source)) outgoingConnToContent.set(e.source, []);
-        outgoingConnToContent.get(e.source).push(e.target);
-      }
-    }
-  }
-
-  // Gera pontes para cada cadeia Conteúdo -> Conectivo -> Conteúdo
-  for (const [connId, sources] of incomingContentToConn.entries()) {
-    const targets = outgoingConnToContent.get(connId) || [];
-    for (const s of sources) {
-      for (const t of targets) {
-        if (s !== t) {
-          allEdges.push({
-            source: s,
-            target: t,
-            weight: 0.75,
-            kind: 'ponte sequencial',
-            kind_id: 'bridge_sequence',
-            isBridgeEdge: true
-          });
-        }
-      }
-    }
-  }
-
-  // Criação dos objetos Three.js para todas as arestas
+  // 4. Criação dos objetos Three.js para todas as arestas (com suporte a atalhos de conteúdo quando conectivos estiverem ocultos)
+  const allEdges = graphData.edges || [];
   for (const e of allEdges) {
     const sourceNode = nodes.get(e.source);
     const targetNode = nodes.get(e.target);
@@ -325,7 +295,7 @@ function applyGraph(graphData) {
     const baseColor = new THREE.Color(lineColorStr);
     const isSequenceReply = (e.kind_id === 'reply_sequence' || e.kind === 'sequência na resposta');
     const isConnEdge = (sourceNode.data.group === 'conectivos' || targetNode.data.group === 'conectivos');
-    const isBridge = !!e.isBridgeEdge;
+    const isShortcut = !!e.is_shortcut;
 
     const lineMat = new THREE.LineBasicMaterial({
       color: (traceActive && isSequenceReply) ? TRACE_GOLD.clone() : baseColor.clone(),
@@ -343,14 +313,15 @@ function applyGraph(graphData) {
       kind_id: e.kind_id || '',
       baseColor: baseColor,
       isConnectiveEdge: isConnEdge,
-      isBridgeEdge: isBridge
+      isShortcut: isShortcut
     };
 
     if (!connectivesVisible) {
       if (isConnEdge) line.visible = false;
-      if (isBridge) line.visible = true;
+      if (isShortcut) line.visible = true;
     } else {
-      if (isBridge) line.visible = false;
+      if (isShortcut) line.visible = false;
+      if (isConnEdge) line.visible = true;
     }
 
     root.add(line);
@@ -420,6 +391,23 @@ function frame(time = 0) {
     yaw += 0.0006;
   }
 
+  // Pré-cálculo de palavras ativas e arestas percorridas na trajetória para performance 60 FPS
+  let activeReplyWords = [];
+  const traversedEdgeKeys = new Set();
+  if (trajectoryActive && replySequence.length > 0) {
+    activeReplyWords = connectivesVisible
+      ? replySequence
+      : replySequence.filter(w => {
+          const nd = nodes.get(w);
+          return nd ? nd.data.group !== 'conectivos' : !functionalTokens.has(w);
+        });
+    for (let sIdx = 0; sIdx < trajectoryStep && sIdx < activeReplyWords.length - 1; sIdx++) {
+      const a = activeReplyWords[sIdx];
+      const b = activeReplyWords[sIdx + 1];
+      traversedEdgeKeys.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+    }
+  }
+
   // Atualização suave das posições e opacidades dos nós
   for (const o of nodes.values()) {
     if (o.data.group === 'conectivos' && !connectivesVisible) {
@@ -436,18 +424,29 @@ function frame(time = 0) {
     } else if (focus) {
       targetOpacity = (focus === o.data.id) ? 1.0 : 0.35;
     } else if (traceActive) {
-      if (o.data.origin === 'resposta') {
-        targetOpacity = 1.0;
-      } else if (o.data.origin === 'vocabulário demonstrativo') {
-        targetOpacity = 0.30;
-      } else {
-        targetOpacity = 0.90;
-      }
+      const isReplyWord = !!(o.data.in_reply || o.data.origin === 'resposta');
+      targetOpacity = isReplyWord ? 1.0 : 0.08;
     } else {
       targetOpacity = 1.0;
     }
 
     o.sprite.material.opacity += (targetOpacity - o.sprite.material.opacity) * 0.15;
+
+    // Escala dinâmica na Trajetória passo a passo
+    let currentScale = o.baseScale;
+    if (trajectoryActive && activeReplyWords.length > 0) {
+      const idx = activeReplyWords.indexOf(o.data.id);
+      if (idx !== -1) {
+        if (idx === trajectoryStep) {
+          // Palavra em formulação ativa no instante
+          currentScale = o.baseScale * (1.28 + 0.08 * Math.sin(time * 0.015));
+        } else if (idx < trajectoryStep) {
+          // Palavra já consolidada na linha de pensamento
+          currentScale = o.baseScale * 1.12;
+        }
+      }
+    }
+    o.sprite.scale.set(3.0 * currentScale, 0.563 * currentScale, 1);
   }
 
   // Atualização direta das arestas sem alocações em tempo real
@@ -462,11 +461,11 @@ function frame(time = 0) {
         edge.visible = false;
         continue;
       }
-      if (edge.userData.isBridgeEdge) {
+      if (edge.userData.isShortcut) {
         edge.visible = true;
       }
     } else {
-      if (edge.userData.isBridgeEdge) {
+      if (edge.userData.isShortcut) {
         edge.visible = false;
         continue;
       }
@@ -488,7 +487,18 @@ function frame(time = 0) {
         edge.material.opacity = pulseOpacity;
       } else {
         edge.material.color.copy(edge.userData.baseColor);
-        edge.material.opacity += (0.035 - edge.material.opacity) * 0.15;
+        edge.material.opacity += (0.02 - edge.material.opacity) * 0.15;
+      }
+    } else if (trajectoryActive && activeReplyWords.length > 0) {
+      const pairKey = edge.userData.source < edge.userData.target
+        ? `${edge.userData.source}|${edge.userData.target}`
+        : `${edge.userData.target}|${edge.userData.source}`;
+      if (traversedEdgeKeys.has(pairKey)) {
+        edge.material.color.copy(TRACE_GOLD);
+        edge.material.opacity = 0.88;
+      } else {
+        edge.material.color.copy(edge.userData.baseColor);
+        edge.material.opacity += (0.15 - edge.material.opacity) * 0.15;
       }
     } else if (activeDimension) {
       const matchSource = edge.userData.sourceNode.data.group === activeDimension;
@@ -615,9 +625,68 @@ function updateTraceButton() {
 
 $('highlight-trace').onclick = () => {
   traceActive = !traceActive;
+  if (traceActive && trajectoryActive) {
+    stopTrajectory();
+  }
   storage.set(STORAGE_KEYS.TRACE, traceActive);
   updateTraceButton();
 };
+
+// Controle do Botão Trajetória (Rastro passo a passo da formação do pensamento da IA)
+function updateTrajectoryButton() {
+  const btn = $('trajectory-btn');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', String(trajectoryActive));
+  btn.classList.toggle('active', trajectoryActive);
+}
+
+function startTrajectory() {
+  trajectoryActive = true;
+  trajectoryStep = 0;
+  clearInterval(trajectoryTimer);
+  updateTrajectoryButton();
+
+  // Desativa Linha da Resposta se estiver ligada para dar lugar à Trajetória dinâmica
+  if (traceActive) {
+    traceActive = false;
+    storage.set(STORAGE_KEYS.TRACE, false);
+    updateTraceButton();
+  }
+
+  trajectoryTimer = setInterval(() => {
+    if (!trajectoryActive) return;
+    const activeWords = connectivesVisible
+      ? replySequence
+      : replySequence.filter(w => {
+          const nd = nodes.get(w);
+          return nd ? nd.data.group !== 'conectivos' : !functionalTokens.has(w);
+        });
+    if (!activeWords.length) return;
+    trajectoryStep++;
+    // Permanece com o caminho completo visível por ~1.2s (4 passos de 300ms) antes de reiniciar o loop do rastro
+    if (trajectoryStep >= activeWords.length + 4) {
+      trajectoryStep = 0;
+    }
+  }, 300);
+}
+
+function stopTrajectory() {
+  trajectoryActive = false;
+  trajectoryStep = 0;
+  clearInterval(trajectoryTimer);
+  updateTrajectoryButton();
+}
+
+const btnTrajectory = $('trajectory-btn');
+if (btnTrajectory) {
+  btnTrajectory.onclick = () => {
+    if (trajectoryActive) {
+      stopTrajectory();
+    } else {
+      startTrajectory();
+    }
+  };
+}
 
 // Controle do Botão Conectivos (Com/Sem Conectivos no Three.js)
 function updateConnectivesButton() {
@@ -633,6 +702,9 @@ if (btnConnectives) {
     connectivesVisible = !connectivesVisible;
     storage.set(STORAGE_KEYS.CONNECTIVES, connectivesVisible);
     updateConnectivesButton();
+    if (trajectoryActive) {
+      trajectoryStep = 0;
+    }
     if (!connectivesVisible && activeDimension === 'conectivos') {
       activeDimension = null;
       for (const chip of $('legend').children) {
@@ -1104,6 +1176,7 @@ $('export').onclick = () => {
       mode: currentMode,
       preset: currentPreset,
       trace_active: traceActive,
+      trajectory_active: trajectoryActive,
       connectives_visible: connectivesVisible,
       paused: paused
     },
@@ -1153,6 +1226,7 @@ async function health() {
 applyModeUI(currentMode);
 updateBalanceUI(currentPromptTokens, currentReplyTokens, currentSliderVal, currentPreset !== 'custom' ? currentPreset : null);
 updateTraceButton();
+updateTrajectoryButton();
 updateConnectivesButton();
 updatePauseButton();
 health();

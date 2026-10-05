@@ -87,12 +87,14 @@ GROUPS = {
         'inteligência', 'artificial', 'modelo', 'token', 'tokens', 'rede', 'neural', 'dados',
         'algoritmo', 'computador', 'ia', 'llm', 'código', 'software', 'aprendizado', 'máquina',
         'treinamento', 'padrão', 'probabilidade', 'informação', 'parâmetros', 'atenção', 'vetor',
-        'hardware', 'servidor', 'digital', 'automação', 'sistema'
+        'hardware', 'servidor', 'digital', 'automação', 'sistema',
+        'processamento', 'computação', 'dispositivo'
     ],
     'linguagem': [
         'linguagem', 'palavra', 'palavras', 'texto', 'leitura', 'escrita', 'fala', 'significado',
         'contexto', 'português', 'inglês', 'semântica', 'frase', 'pergunta', 'resposta',
-        'interpretação', 'vocabulário', 'gramática', 'sentido', 'expressão', 'sintaxe', 'discurso'
+        'interpretação', 'vocabulário', 'gramática', 'sentido', 'expressão', 'sintaxe', 'discurso',
+        'linguístico', 'linguísticos', 'expressões', 'comunicação'
     ],
     'ciência': [
         'ciência', 'pesquisa', 'hipótese', 'teoria', 'experimento', 'método', 'física', 'química',
@@ -102,7 +104,9 @@ GROUPS = {
     'mente': [
         'mente', 'cérebro', 'pensamento', 'consciência', 'memória', 'neurônio', 'cognição',
         'psicologia', 'percepção', 'raciocínio', 'ideia', 'emoção', 'sentimento', 'inteligência',
-        'aprendizagem', 'imaginação', 'intuição', 'compreensão'
+        'aprendizagem', 'imaginação', 'intuição', 'compreensão',
+        'entende', 'entender', 'compreende', 'compreender', 'entendimento', 'capaz', 'capacidade',
+        'potencial', 'cognitivo', 'pensar', 'aprender', 'interpreta', 'interpretar'
     ],
     'natureza': [
         'natureza', 'ambiente', 'planeta', 'terra', 'vida', 'animal', 'planta', 'floresta',
@@ -112,7 +116,8 @@ GROUPS = {
     'sociedade': [
         'sociedade', 'cultura', 'comunidade', 'povo', 'humano', 'humanidade', 'cidadão',
         'cidadania', 'história', 'tradição', 'política', 'população', 'governo', 'democracia',
-        'social', 'civilização', 'coletivo', 'identidade', 'público'
+        'social', 'civilização', 'coletivo', 'identidade', 'público',
+        'brasil', 'brasília', 'país', 'nação', 'estado', 'cidade', 'capital'
     ],
     'economia': [
         'economia', 'mercado', 'dinheiro', 'moeda', 'preço', 'valor', 'custo', 'investimento',
@@ -190,6 +195,22 @@ def readable_candidates(items):
     return clean
 
 
+def normalize_dynamic_group(word: str) -> str:
+    """
+    Normaliza morfologicamente termos desconhecidos para agrupamento semântico conceitual.
+    Garante nomes descritivos padronizados (ação/efeito, qualidade/estado ou conceito).
+    """
+    w = word.lower().strip()
+    # Adjetivos / Qualidades / Estados (sufixos típicos em português)
+    if w.endswith(('nte', 'vel', 'oso', 'osa', 'az', 'il', 'ivo', 'iva', 'al', 'ico', 'ica')):
+        return f'qualidade: {w}'
+    # Verbos / Ações / Efeitos (terminações verbais comuns em português)
+    if w.endswith(('ar', 'er', 'ir', 'ando', 'endo', 'indo', 'ou', 'eu', 'iu', 'aria', 'eria', 'iria', 'asse', 'esse', 'isse', 'am', 'em')):
+        return f'ação: {w}'
+    # Substantivos e termos conceituais gerais
+    return f'conceito: {w}'
+
+
 def graph(text: str, answer: str = ''):
     """
     Heurística lexical determinística e rápida para alimentar o Three.js.
@@ -231,7 +252,7 @@ def graph(text: str, answer: str = ''):
                             visited.add(neighbor)
                             queue.append(neighbor)
                 root = min(comp, key=lambda x: keys.index(x))
-                group_name = f'tema: {root}'
+                group_name = normalize_dynamic_group(root)
                 for member in comp:
                     dynamic_group_map[member] = group_name
 
@@ -250,22 +271,36 @@ def graph(text: str, answer: str = ''):
         else:
             g = next((group_name for group_name, vocab_set in GROUPS_SET.items() if w in vocab_set), None)
             if g is None:
-                g = dynamic_group_map.get(w, f'tema: {w}')
+                g = dynamic_group_map.get(w, normalize_dynamic_group(w))
             if w in source:
                 weight = min(1.0, 0.50 + 0.12 * source.count(w))
                 origin = 'entrada'
             else:
                 weight = min(0.95, 0.42 + 0.08 * reply.count(w))
                 origin = 'resposta'
-        nodes.append(dict(id=w, group=g, weight=round(weight, 2), origin=origin))
+        nodes.append(dict(
+            id=w,
+            group=g,
+            weight=round(weight, 2),
+            origin=origin,
+            in_reply=(w in reply),
+            in_source=(w in source)
+        ))
 
     for w, g in expanded[:50]:
-        nodes.append(dict(id=w, group=g, weight=0.25, origin='vocabulário demonstrativo'))
+        nodes.append(dict(
+            id=w,
+            group=g,
+            weight=0.25,
+            origin='vocabulário demonstrativo',
+            in_reply=False,
+            in_source=False
+        ))
 
     edges = []
     edges_dict = {}
 
-    def add_edge(s: str, t: str, weight: float, kind: str):
+    def add_edge(s: str, t: str, weight: float, kind: str, is_shortcut: bool = False):
         if s == t:
             return
         pair = (s, t) if s < t else (t, s)
@@ -274,12 +309,22 @@ def graph(text: str, answer: str = ''):
         kind_id = 'reply_sequence' if 'resposta' in kind else ('prompt_sequence' if 'texto' in kind else 'lexical_group')
         if pair in edges_dict:
             existing = edges_dict[pair]
+            old_kind_id = existing.get('kind_id')
+            old_is_shortcut = existing.get('is_shortcut', False)
             if kind == 'sequência na resposta':
                 existing['kind'] = 'sequência na resposta'
                 existing['kind_id'] = 'reply_sequence'
                 existing['weight'] = max(existing['weight'], weight)
+                if not (old_kind_id == 'reply_sequence' and not old_is_shortcut):
+                    existing['is_shortcut'] = is_shortcut
+            elif kind == 'sequência no texto' and old_kind_id != 'reply_sequence':
+                existing['kind'] = 'sequência no texto'
+                existing['kind_id'] = 'prompt_sequence'
+                existing['weight'] = max(existing['weight'], weight)
+                if not (old_kind_id == 'prompt_sequence' and not old_is_shortcut):
+                    existing['is_shortcut'] = is_shortcut
             return
-        edge_obj = dict(source=s, target=t, weight=weight, kind=kind, kind_id=kind_id)
+        edge_obj = dict(source=s, target=t, weight=weight, kind=kind, kind_id=kind_id, is_shortcut=is_shortcut)
         edges_dict[pair] = edge_obj
         edges.append(edge_obj)
 
@@ -296,15 +341,35 @@ def graph(text: str, answer: str = ''):
         if a in keys and b in keys:
             add_edge(a, b, 0.8, 'sequência no texto')
 
+    # Atalhos sequenciais entre palavras de conteúdo na pergunta (quando conectivos estiverem ocultos)
+    source_content = [w for w in source if w not in CONNECTIVES]
+    for a, b in zip(source_content, source_content[1:]):
+        if a in keys and b in keys:
+            add_edge(a, b, 0.78, 'sequência no texto', is_shortcut=True)
+
     # Conexões por sequência cronológica contínua da resposta da IA (precedência máxima na linha de resposta)
     for a, b in zip(reply, reply[1:]):
         if a in keys and b in keys:
             add_edge(a, b, 0.9, 'sequência na resposta')
 
+    # Atalhos sequenciais entre palavras de conteúdo na resposta (quando conectivos estiverem ocultos)
+    reply_content = [w for w in reply if w not in CONNECTIVES]
+    for a, b in zip(reply_content, reply_content[1:]):
+        if a in keys and b in keys:
+            add_edge(a, b, 0.88, 'sequência na resposta', is_shortcut=True)
+
+    # Ordenação da legenda: conectivos primeiro (ou padrão), grupos semânticos estáveis no meio,
+    # e grupos dinâmicos ('conceito:', 'ação:', 'qualidade:', 'tema:') obrigatoriamente por último (à direita)
+    all_groups = list(dict.fromkeys(n['group'] for n in nodes))
+    standard_groups = [g for g in all_groups if not any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:'))]
+    dynamic_groups = [g for g in all_groups if any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:'))]
+    sorted_groups = standard_groups + dynamic_groups
+
     return dict(
         nodes=nodes,
         edges=edges,
-        groups=list(dict.fromkeys(n['group'] for n in nodes)),
+        groups=sorted_groups,
+        reply_sequence=[w for w in reply if w in keys],
         method='Heurística lexical: grupos explícitos e sequência no texto; sem embeddings.'
     )
 

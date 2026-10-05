@@ -515,6 +515,42 @@ textarea::placeholder {
   }
 }
 
+#trajectory-btn {
+  background: rgba(16, 24, 38, 0.75);
+  border: 1px solid #2e3d50;
+  color: var(--muted);
+}
+
+#trajectory-btn:hover {
+  border-color: #81e1d0;
+  color: #fff;
+  background: rgba(28, 38, 54, 0.95);
+  box-shadow: 0 0 10px rgba(129, 225, 208, 0.25);
+  transform: translateY(-1px);
+}
+
+#trajectory-btn.active,
+#trajectory-btn[aria-pressed="true"] {
+  background: linear-gradient(135deg, #0e2b34, #0a1924);
+  border-color: #81e1d0;
+  color: #a7f3d0;
+  font-weight: 600;
+  box-shadow: 0 0 14px rgba(129, 225, 208, 0.45), inset 0 0 8px rgba(129, 225, 208, 0.15);
+  text-shadow: 0 0 8px rgba(129, 225, 208, 0.5);
+  animation: trajectoryPulse 2.4s ease-in-out infinite alternate;
+}
+
+@keyframes trajectoryPulse {
+  0% {
+    box-shadow: 0 0 10px rgba(129, 225, 208, 0.3), inset 0 0 6px rgba(129, 225, 208, 0.1);
+    border-color: #81e1d0;
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(129, 225, 208, 0.65), inset 0 0 12px rgba(129, 225, 208, 0.25);
+    border-color: #99f6e4;
+  }
+}
+
 #toggle-connectives {
   background: rgba(16, 24, 38, 0.75);
   border: 1px solid #2e3d50;
