@@ -23,9 +23,16 @@
 
   <main>
     <section class="composer">
-      <div class="eyebrow">IA - DE UM TEXTO PARA UM UNIVERSO DE POSSIBILIDADES.</div>
-      <h1>Veja como seus textos navegam dentro de uma IA.</h1>
+      <h1 class="main-title">IA - DE UM TEXTO PARA UM UNIVERSO DE POSSIBILIDADES.</h1>
+      <p class="subtitle">Veja como seus textos navegam dentro de uma IA.</p>
       
+      <div class="examples">
+        <span>CLIQUE NOS EXEMPLOS:</span>
+        <button type="button" data-example="Como a inteligência artificial entende a linguagem? ">Inteligência & linguagem</button>
+        <button type="button" data-example="Qual é a capital do Brasil? ">Capital do Brasil</button>
+        <button type="button" data-example="Como o cérebro usa a memória durante a leitura? ">Cérebro & memória</button>
+      </div>
+
       <div class="input-wrap">
         <label class="sr" for="prompt">Escreva sua pergunta</label>
         <textarea id="prompt" rows="2" maxlength="3600" placeholder="O que você quer explorar? Comece a escrever…" spellcheck="false"></textarea>
@@ -34,20 +41,32 @@
         </div>
       </div>
 
-      <div class="balance-control" role="group" aria-label="Balança de tokens">
-        <span class="balance-label">BALANÇA DE TOKENS:</span>
-        <button id="balance-detailed" class="balance-btn" type="button" data-preset="detailed" aria-pressed="false" title="Entrada até ~1500 tokens / Resposta até 60 tokens">📝 Pergunta Detalhada</button>
-        <button id="balance-balanced" class="balance-btn active" type="button" data-preset="balanced" aria-pressed="true" title="Entrada até ~900 tokens / Resposta até 140 tokens">⚖️ Equilibrado</button>
-        <button id="balance-expanded" class="balance-btn" type="button" data-preset="expanded" aria-pressed="false" title="Entrada até ~400 tokens / Resposta rica até 260 tokens">💡 Resposta Expandida</button>
-      </div>
-      
       <p class="chat-note" id="input-status">Atualização automática · espaço + 250 ms</p>
-      
-      <div class="examples">
-        <span>CLIQUE NOS EXEMPLOS:</span>
-        <button data-example="Como a inteligência artificial entende a linguagem? ">Inteligência & linguagem</button>
-        <button data-example="Quero viajar para o Japão na primavera ">Japão na primavera</button>
-        <button data-example="Como o cérebro usa a memória durante a leitura? ">Cérebro & memória</button>
+
+      <div class="balance-card">
+        <div class="balance-top">
+          <div class="balance-title-group">
+            <span class="balance-label">BALANÇA DE TOKENS:</span>
+            <div class="balance-presets" role="group" aria-label="Presets da balança de tokens">
+              <button id="balance-detailed" class="balance-btn" type="button" data-preset="detailed" aria-pressed="false" title="Entrada até ~1500 tokens / Resposta até 60 tokens">📝 Pergunta Detalhada</button>
+              <button id="balance-balanced" class="balance-btn active" type="button" data-preset="balanced" aria-pressed="true" title="Entrada até ~900 tokens / Resposta até 140 tokens">⚖️ Equilibrado</button>
+              <button id="balance-expanded" class="balance-btn" type="button" data-preset="expanded" aria-pressed="false" title="Entrada até ~400 tokens / Resposta rica até 260 tokens">💡 Resposta Expandida</button>
+            </div>
+          </div>
+          <div class="balance-tooltip-container">
+            <button type="button" class="balance-tooltip-btn" id="balance-tooltip-btn" aria-describedby="balance-tooltip-card">Como funciona a proporção</button>
+            <div class="balance-tooltip-card" id="balance-tooltip-card" role="tooltip">
+              <div class="tooltip-header">Equilíbrio de Contexto e Latência na CPU</div>
+              <p>A CPU processa a leitura da pergunta em paralelo em frações de segundo. Já a resposta é formulada sequencialmente (~10 a 12 tokens por segundo).</p>
+              <p>A balança harmoniza o limite de contexto (~1.900 tokens úteis) com a agilidade de resposta: perguntas maiores deixam respostas concisas para manter fluidez; perguntas diretas liberam respostas detalhadas.</p>
+            </div>
+          </div>
+        </div>
+        <div class="balance-slider-row">
+          <span class="slider-val-label" id="slider-prompt-label">Pergunta: <strong>900</strong> tokens</span>
+          <input type="range" id="balance-slider" min="0" max="100" value="50" step="1" aria-label="Ajuste fino da proporção da balança de tokens">
+          <span class="slider-val-label" id="slider-reply-label">Resposta: <strong>140</strong> tokens</span>
+        </div>
       </div>
     </section>
 
@@ -58,6 +77,7 @@
           <span id="graph-version">Aguardando texto</span>
         </div>
         <div class="scene-controls">
+          <button id="toggle-connectives" class="trace-btn" type="button" aria-pressed="true" title="Alterna a exibição das palavras de conexão estrutural">Conectivos</button>
           <button id="highlight-trace" class="trace-btn" type="button" aria-pressed="false" title="Destaca a linha de pensamento e a sequência da resposta">✨ Linha da Resposta</button>
           <button id="pause" aria-pressed="false">Pausar movimento</button>
           <button id="reset">Recentralizar</button>
@@ -123,8 +143,12 @@
         <strong id="nodes">0 / 0</strong>
       </div>
       <div>
-        <span><abbr title="Token é uma pequena unidade de texto que a IA lê; pode ser uma palavra inteira ou parte dela.">Tokens do texto</abbr></span>
-        <strong id="tokens">—</strong>
+        <span><abbr title="Tokens medidos na entrada da pergunta">Tokens da pergunta</abbr></span>
+        <strong id="tokens-prompt">—</strong>
+      </div>
+      <div>
+        <span><abbr title="Tokens gerados na resposta do modelo">Tokens da resposta</abbr></span>
+        <strong id="tokens-reply">—</strong>
       </div>
       <div>
         <span>Velocidade da resposta</span>
@@ -143,6 +167,15 @@
             <li><b>Proximidade:</b> palavras que compartilham a mesma família temática são aproximadas no espaço.</li>
           </ul>
           <p class="note">As cores e a profundidade 3D facilitam a navegação visual e representam a heurística do vocabulário.</p>
+        </article>
+
+        <article class="info-card">
+          <h2>⚖️ Balança de Tokens</h2>
+          <p>Permite dosar a divisão dos ~1.900 tokens úteis do contexto entre a pergunta e a resposta.</p>
+          <ul>
+            <li><b>Pergunta detalhada:</b> ideal para colar textos longos; a resposta é objetiva para manter baixo tempo de espera na CPU.</li>
+            <li><b>Resposta expandida:</b> ideal para perguntas diretas, permitindo ao modelo desenvolver raciocínios ricos e aprofundados.</li>
+          </ul>
         </article>
 
         <article class="info-card">

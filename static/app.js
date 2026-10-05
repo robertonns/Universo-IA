@@ -19,7 +19,11 @@ const colors = {
 const STORAGE_KEYS = {
   MODE: 'universo_mode',
   BALANCE: 'universo_balance',
+  BALANCE_SLIDER: 'universo_balance_slider',
+  BALANCE_PROMPT: 'universo_prompt_tokens',
+  BALANCE_REPLY: 'universo_reply_tokens',
   TRACE: 'universo_trace',
+  CONNECTIVES: 'universo_connectives',
   PAUSED: 'universo_paused'
 };
 
@@ -47,6 +51,7 @@ const BALANCE_PRESETS = {
     maxPromptTokens: 1500,
     maxChars: 6000,
     maxTokens: 60,
+    sliderValue: 7,
     tokenCapacityDesc: 'Prévia · até 60 tokens'
   },
   balanced: {
@@ -55,6 +60,7 @@ const BALANCE_PRESETS = {
     maxPromptTokens: 900,
     maxChars: 3600,
     maxTokens: 140,
+    sliderValue: 50,
     tokenCapacityDesc: 'Prévia · até 140 tokens'
   },
   expanded: {
@@ -63,6 +69,7 @@ const BALANCE_PRESETS = {
     maxPromptTokens: 400,
     maxChars: 1600,
     maxTokens: 260,
+    sliderValue: 86,
     tokenCapacityDesc: 'Prévia · até 260 tokens'
   }
 };
@@ -81,7 +88,14 @@ if (currentMode !== 'local' && currentMode !== 'demo') currentMode = 'local';
 let currentPreset = storage.get(STORAGE_KEYS.BALANCE, 'balanced');
 if (!BALANCE_PRESETS[currentPreset]) currentPreset = 'balanced';
 
+const initialPreset = BALANCE_PRESETS[currentPreset] || BALANCE_PRESETS.balanced;
+let currentPromptTokens = parseInt(storage.get(STORAGE_KEYS.BALANCE_PROMPT, String(initialPreset.maxPromptTokens)), 10) || initialPreset.maxPromptTokens;
+let currentReplyTokens = parseInt(storage.get(STORAGE_KEYS.BALANCE_REPLY, String(initialPreset.maxTokens)), 10) || initialPreset.maxTokens;
+let currentSliderVal = parseInt(storage.get(STORAGE_KEYS.BALANCE_SLIDER, String(initialPreset.sliderValue)), 10) || initialPreset.sliderValue;
+
 let traceActive = storage.get(STORAGE_KEYS.TRACE) === 'true';
+let connectivesVisible = storage.get(STORAGE_KEYS.CONNECTIVES, 'true') !== 'false';
+let activeDimension = null;
 
 const savedPaused = storage.get(STORAGE_KEYS.PAUSED);
 let paused = savedPaused !== null
@@ -253,38 +267,92 @@ function applyGraph(graphData) {
   }
   edgeObjects = [];
 
-  // 4. Criação de novas arestas com referências diretas para 60 FPS
-  if (Array.isArray(graphData.edges)) {
-    for (const e of graphData.edges) {
-      const sourceNode = nodes.get(e.source);
-      const targetNode = nodes.get(e.target);
-      if (!sourceNode || !targetNode) continue;
+  // 4. Criação de arestas normais e arestas-ponte (para ligação direta quando conectivos estiverem ocultos)
+  const allEdges = [...(graphData.edges || [])];
+  const incomingContentToConn = new Map();
+  const outgoingConnToContent = new Map();
 
-      const geo = new THREE.BufferGeometry().setFromPoints([
-        sourceNode.sprite.position.clone(),
-        targetNode.sprite.position.clone()
-      ]);
-      const lineColorStr = getGroupColor(sourceNode.data.group);
-      const baseColor = new THREE.Color(lineColorStr);
-      const isSequenceReply = (e.kind === 'sequência na resposta');
-      const lineMat = new THREE.LineBasicMaterial({
-        color: (traceActive && isSequenceReply) ? TRACE_GOLD.clone() : baseColor.clone(),
-        transparent: true,
-        opacity: (traceActive && isSequenceReply) ? 0.70 : 0.15,
-        depthWrite: false
-      });
-      const line = new THREE.Line(geo, lineMat);
-      line.userData = {
-        source: e.source,
-        target: e.target,
-        sourceNode,
-        targetNode,
-        kind: e.kind || '',
-        baseColor: baseColor
-      };
-      root.add(line);
-      edgeObjects.push(line);
+  for (const e of allEdges) {
+    const isSeq = e.kind_id === 'reply_sequence' || e.kind_id === 'prompt_sequence' || (e.kind && e.kind.includes('sequência'));
+    if (isSeq) {
+      const sNode = nodes.get(e.source);
+      const tNode = nodes.get(e.target);
+      if (!sNode || !tNode) continue;
+      const sConn = sNode.data.group === 'conectivos';
+      const tConn = tNode.data.group === 'conectivos';
+      if (!sConn && tConn) {
+        if (!incomingContentToConn.has(e.target)) incomingContentToConn.set(e.target, []);
+        incomingContentToConn.get(e.target).push(e.source);
+      } else if (sConn && !tConn) {
+        if (!outgoingConnToContent.has(e.source)) outgoingConnToContent.set(e.source, []);
+        outgoingConnToContent.get(e.source).push(e.target);
+      }
     }
+  }
+
+  // Gera pontes para cada cadeia Conteúdo -> Conectivo -> Conteúdo
+  for (const [connId, sources] of incomingContentToConn.entries()) {
+    const targets = outgoingConnToContent.get(connId) || [];
+    for (const s of sources) {
+      for (const t of targets) {
+        if (s !== t) {
+          allEdges.push({
+            source: s,
+            target: t,
+            weight: 0.75,
+            kind: 'ponte sequencial',
+            kind_id: 'bridge_sequence',
+            isBridgeEdge: true
+          });
+        }
+      }
+    }
+  }
+
+  // Criação dos objetos Three.js para todas as arestas
+  for (const e of allEdges) {
+    const sourceNode = nodes.get(e.source);
+    const targetNode = nodes.get(e.target);
+    if (!sourceNode || !targetNode) continue;
+
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      sourceNode.sprite.position.clone(),
+      targetNode.sprite.position.clone()
+    ]);
+    const lineColorStr = getGroupColor(sourceNode.data.group);
+    const baseColor = new THREE.Color(lineColorStr);
+    const isSequenceReply = (e.kind_id === 'reply_sequence' || e.kind === 'sequência na resposta');
+    const isConnEdge = (sourceNode.data.group === 'conectivos' || targetNode.data.group === 'conectivos');
+    const isBridge = !!e.isBridgeEdge;
+
+    const lineMat = new THREE.LineBasicMaterial({
+      color: (traceActive && isSequenceReply) ? TRACE_GOLD.clone() : baseColor.clone(),
+      transparent: true,
+      opacity: (traceActive && isSequenceReply) ? 0.70 : 0.15,
+      depthWrite: false
+    });
+    const line = new THREE.Line(geo, lineMat);
+    line.userData = {
+      source: e.source,
+      target: e.target,
+      sourceNode,
+      targetNode,
+      kind: e.kind || '',
+      kind_id: e.kind_id || '',
+      baseColor: baseColor,
+      isConnectiveEdge: isConnEdge,
+      isBridgeEdge: isBridge
+    };
+
+    if (!connectivesVisible) {
+      if (isConnEdge) line.visible = false;
+      if (isBridge) line.visible = true;
+    } else {
+      if (isBridge) line.visible = false;
+    }
+
+    root.add(line);
+    edgeObjects.push(line);
   }
 
   // 5. Atualização de indicadores da UI
@@ -293,11 +361,30 @@ function applyGraph(graphData) {
   $('nodes').textContent = `${nodesCount} / ${edgesCount}`;
   $('scene-empty').hidden = nodesCount > 0;
 
+  // 6. Legenda interativa com foco de dimensão por clique
   const groups = Array.isArray(graphData.groups) ? graphData.groups : [];
   $('legend').replaceChildren(...groups.map(g => {
     const s = document.createElement('span');
     s.textContent = g;
     s.style.setProperty('--color', getGroupColor(g));
+    s.classList.toggle('active', activeDimension === g);
+    s.title = `Clique para isolar a dimensão "${g}"`;
+    s.onclick = () => {
+      if (activeDimension === g) {
+        activeDimension = null;
+      } else {
+        activeDimension = g;
+        // Se clicar na dimensão conectivos e eles estiverem ocultos, reativa-os
+        if (g === 'conectivos' && !connectivesVisible) {
+          connectivesVisible = true;
+          storage.set(STORAGE_KEYS.CONNECTIVES, true);
+          updateConnectivesButton();
+        }
+      }
+      for (const chip of $('legend').children) {
+        chip.classList.toggle('active', chip.textContent === activeDimension);
+      }
+    };
     return s;
   }));
 }
@@ -333,10 +420,18 @@ function frame(time = 0) {
 
   // Atualização suave das posições e opacidades dos nós
   for (const o of nodes.values()) {
+    if (o.data.group === 'conectivos' && !connectivesVisible) {
+      o.sprite.visible = false;
+      continue;
+    }
+    o.sprite.visible = true;
     o.sprite.position.lerp(o.target, 0.08);
 
     let targetOpacity = 1.0;
-    if (focus) {
+    if (activeDimension) {
+      // Foco isolado na dimensão selecionada na legenda
+      targetOpacity = (o.data.group === activeDimension) ? 1.0 : 0.08;
+    } else if (focus) {
       targetOpacity = (focus === o.data.id) ? 1.0 : 0.35;
     } else if (traceActive) {
       if (o.data.origin === 'resposta') {
@@ -358,6 +453,24 @@ function frame(time = 0) {
 
   for (let i = 0; i < edgeObjects.length; i++) {
     const edge = edgeObjects[i];
+
+    // Adaptação suave para conectivos ligados/desligados
+    if (!connectivesVisible) {
+      if (edge.userData.isConnectiveEdge) {
+        edge.visible = false;
+        continue;
+      }
+      if (edge.userData.isBridgeEdge) {
+        edge.visible = true;
+      }
+    } else {
+      if (edge.userData.isBridgeEdge) {
+        edge.visible = false;
+        continue;
+      }
+      edge.visible = true;
+    }
+
     const a = edge.userData.sourceNode.sprite.position;
     const b = edge.userData.targetNode.sprite.position;
     const pos = edge.geometry.attributes.position;
@@ -365,13 +478,25 @@ function frame(time = 0) {
     pos.setXYZ(1, b.x, b.y, b.z);
     pos.needsUpdate = true;
 
+    const isSequenceReply = (edge.userData.kind_id === 'reply_sequence' || edge.userData.kind === 'sequência na resposta');
+
     if (traceActive) {
-      if (edge.userData.kind === 'sequência na resposta') {
+      if (isSequenceReply) {
         edge.material.color.copy(TRACE_GOLD);
         edge.material.opacity = pulseOpacity;
       } else {
         edge.material.color.copy(edge.userData.baseColor);
         edge.material.opacity += (0.035 - edge.material.opacity) * 0.15;
+      }
+    } else if (activeDimension) {
+      const matchSource = edge.userData.sourceNode.data.group === activeDimension;
+      const matchTarget = edge.userData.targetNode.data.group === activeDimension;
+      if (matchSource && matchTarget) {
+        edge.material.color.copy(edge.userData.baseColor);
+        edge.material.opacity += (0.55 - edge.material.opacity) * 0.15;
+      } else {
+        edge.material.color.copy(edge.userData.baseColor);
+        edge.material.opacity += (0.02 - edge.material.opacity) * 0.15;
       }
     } else {
       edge.material.color.copy(edge.userData.baseColor);
@@ -492,6 +617,44 @@ $('highlight-trace').onclick = () => {
   updateTraceButton();
 };
 
+// Controle do Botão Conectivos (Com/Sem Conectivos no Three.js)
+function updateConnectivesButton() {
+  const btn = $('toggle-connectives');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', String(connectivesVisible));
+  btn.classList.toggle('active', connectivesVisible);
+}
+
+const btnConnectives = $('toggle-connectives');
+if (btnConnectives) {
+  btnConnectives.onclick = () => {
+    connectivesVisible = !connectivesVisible;
+    storage.set(STORAGE_KEYS.CONNECTIVES, connectivesVisible);
+    updateConnectivesButton();
+    if (!connectivesVisible && activeDimension === 'conectivos') {
+      activeDimension = null;
+      for (const chip of $('legend').children) {
+        chip.classList.toggle('active', false);
+      }
+    }
+  };
+}
+
+// Tooltip de explicação da proporção e latência (sem ícone)
+const tooltipBtn = $('balance-tooltip-btn');
+const tooltipCard = $('balance-tooltip-card');
+if (tooltipBtn && tooltipCard) {
+  tooltipBtn.onclick = (e) => {
+    e.stopPropagation();
+    tooltipCard.classList.toggle('active');
+  };
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.balance-tooltip-container')) {
+      tooltipCard.classList.remove('active');
+    }
+  });
+}
+
 // Alternância de Modo: Modelo Local vs Demonstração
 function applyModeUI(mode) {
   if (mode === 'local') {
@@ -520,36 +683,100 @@ function setMode(newMode) {
 $('btn-mode-local').onclick = () => setMode('local');
 $('btn-mode-demo').onclick = () => setMode('demo');
 
-// Gerenciamento da Balança de Tokens
+// Gerenciamento da Balança de Tokens e Slider Contínuo
 function updateCharCounter() {
   const currentLen = $('prompt').value.length;
-  const preset = BALANCE_PRESETS[currentPreset];
-  $('chars').textContent = `${currentLen} / ${preset.maxChars} (até ~${preset.maxPromptTokens} tokens)`;
+  const maxChars = currentPromptTokens * 4;
+  $('chars').textContent = `${currentLen} / ${maxChars} (até ~${currentPromptTokens} tokens)`;
+}
+
+function calculateBalanceFromSlider(val) {
+  const v = Math.max(0, Math.min(100, Number(val)));
+  let promptTok, replyTok;
+  if (v <= 50) {
+    const r = v / 50;
+    promptTok = Math.round(1600 - r * 700); // 1600 -> 900
+    replyTok = Math.round(30 + r * 110);    // 30 -> 140
+  } else {
+    const r = (v - 50) / 50;
+    promptTok = Math.round(900 - r * 700);  // 900 -> 200
+    replyTok = Math.round(140 + r * 140);   // 140 -> 280
+  }
+  return { promptTok, replyTok };
+}
+
+function updateBalanceUI(promptTok, replyTok, sliderVal, activePresetId = null) {
+  currentPromptTokens = promptTok;
+  currentReplyTokens = replyTok;
+  currentSliderVal = sliderVal;
+
+  const maxChars = promptTok * 4;
+  $('prompt').maxLength = maxChars;
+  updateCharCounter();
+
+  const promptLabel = $('slider-prompt-label');
+  if (promptLabel) promptLabel.innerHTML = `Pergunta: <strong>${promptTok}</strong> tokens`;
+  const replyLabel = $('slider-reply-label');
+  if (replyLabel) replyLabel.innerHTML = `Resposta: <strong>${replyTok}</strong> tokens`;
+
+  const slider = $('balance-slider');
+  if (slider && Number(slider.value) !== sliderVal) {
+    slider.value = sliderVal;
+  }
+
+  $('token-capacity').textContent = `Prévia · até ${replyTok} tokens`;
+
+  for (const btn of document.querySelectorAll('.balance-btn')) {
+    const isActive = activePresetId && (btn.dataset.preset === activePresetId);
+    btn.classList.toggle('active', !!isActive);
+    btn.setAttribute('aria-pressed', String(!!isActive));
+  }
+
+  storage.set(STORAGE_KEYS.BALANCE_PROMPT, promptTok);
+  storage.set(STORAGE_KEYS.BALANCE_REPLY, replyTok);
+  storage.set(STORAGE_KEYS.BALANCE_SLIDER, sliderVal);
+  if (activePresetId) {
+    storage.set(STORAGE_KEYS.BALANCE, activePresetId);
+  }
 }
 
 function setBalancePreset(presetId, triggerSubmit = true) {
-  if (!BALANCE_PRESETS[presetId]) return;
-  currentPreset = presetId;
-  storage.set(STORAGE_KEYS.BALANCE, currentPreset);
-
   const preset = BALANCE_PRESETS[presetId];
-  $('prompt').maxLength = preset.maxChars;
-  updateCharCounter();
-  $('token-capacity').textContent = preset.tokenCapacityDesc;
-
-  for (const btn of document.querySelectorAll('.balance-btn')) {
-    const isActive = (btn.dataset.preset === presetId);
-    btn.classList.toggle('active', isActive);
-    btn.setAttribute('aria-pressed', String(isActive));
-  }
-
+  if (!preset) return;
+  currentPreset = presetId;
+  updateBalanceUI(preset.maxPromptTokens, preset.maxTokens, preset.sliderValue, presetId);
   if (triggerSubmit && $('prompt').value.trim()) {
     submit();
   }
 }
 
+function onSliderInput(val) {
+  const { promptTok, replyTok } = calculateBalanceFromSlider(val);
+  let matchedPreset = null;
+  if (Math.abs(val - BALANCE_PRESETS.detailed.sliderValue) <= 2) matchedPreset = 'detailed';
+  else if (Math.abs(val - BALANCE_PRESETS.balanced.sliderValue) <= 2) matchedPreset = 'balanced';
+  else if (Math.abs(val - BALANCE_PRESETS.expanded.sliderValue) <= 2) matchedPreset = 'expanded';
+
+  currentPreset = matchedPreset || 'custom';
+  updateBalanceUI(promptTok, replyTok, Number(val), matchedPreset);
+}
+
 for (const btn of document.querySelectorAll('.balance-btn')) {
   btn.onclick = () => setBalancePreset(btn.dataset.preset);
+}
+
+const balanceSlider = $('balance-slider');
+let sliderSubmitDebounce = null;
+if (balanceSlider) {
+  balanceSlider.addEventListener('input', (e) => {
+    onSliderInput(e.target.value);
+  });
+  balanceSlider.addEventListener('change', () => {
+    if ($('prompt').value.trim()) {
+      clearTimeout(sliderSubmitDebounce);
+      sliderSubmitDebounce = setTimeout(() => submit(), 150);
+    }
+  });
 }
 
 // Lista de palavras gramaticais/funcionais para classificar candidatos
@@ -680,8 +907,12 @@ async function submit(text = $('prompt').value) {
     $('generation-state').textContent = 'Aguardando contexto';
     $('answer-version').textContent = '—';
     $('words').textContent = '0';
-    $('tokens').textContent = '—';
+    const promptTokElem = $('tokens-prompt') || $('tokens');
+    if (promptTokElem) promptTokElem.textContent = '—';
+    const replyTokElem = $('tokens-reply');
+    if (replyTokElem) replyTokElem.textContent = '—';
     $('speed').textContent = '—';
+    $('token-capacity').textContent = `Prévia · até ${currentReplyTokens} tokens`;
     candidates([]);
     return;
   }
@@ -709,7 +940,6 @@ async function submit(text = $('prompt').value) {
   requestAbort = new AbortController();
   answerVersion = requestVersion;
 
-  const preset = BALANCE_PRESETS[currentPreset];
   const requestStartTime = performance.now();
   let firstTokenTime = null;
   let chunkCount = 0;
@@ -718,9 +948,11 @@ async function submit(text = $('prompt').value) {
     version: requestVersion,
     mode: currentMode,
     preset: currentPreset,
-    max_tokens: preset.maxTokens,
-    max_prompt_tokens: preset.maxPromptTokens,
+    slider_value: currentSliderVal,
+    max_tokens: currentReplyTokens,
+    max_prompt_tokens: currentPromptTokens,
     trace_active: traceActive,
+    connectives_visible: connectivesVisible,
     started_at: new Date().toISOString()
   };
 
@@ -732,7 +964,10 @@ async function submit(text = $('prompt').value) {
     $('notice').textContent = 'Modo Demonstração ativo. Navegação 3D sem necessidade do modelo em execução.';
   }
   candidates([]);
-  $('tokens').textContent = '—';
+  const initPromptTok = $('tokens-prompt') || $('tokens');
+  if (initPromptTok) initPromptTok.textContent = '—';
+  const initReplyTok = $('tokens-reply');
+  if (initReplyTok) initReplyTok.textContent = '—';
   $('speed').textContent = '—';
 
   try {
@@ -741,8 +976,8 @@ async function submit(text = $('prompt').value) {
       {
         text,
         mode: currentMode,
-        max_tokens: preset.maxTokens,
-        max_prompt_tokens: preset.maxPromptTokens
+        max_tokens: currentReplyTokens,
+        max_prompt_tokens: currentPromptTokens
       },
       requestAbort.signal,
       (name, result) => {
@@ -755,6 +990,7 @@ async function submit(text = $('prompt').value) {
           chunkCount++;
           $('answer').textContent += result.text || '';
           $('generation-state').textContent = currentMode === 'demo' ? 'Exibindo demonstração…' : 'Gerando resposta…';
+          $('token-capacity').textContent = `Gerando · ${chunkCount} / ${currentReplyTokens} tokens…`;
           candidates(result.candidates || []);
           return;
         }
@@ -777,7 +1013,13 @@ async function submit(text = $('prompt').value) {
           $('answer').textContent = result.answer || $('answer').textContent;
           $('answer-version').textContent = `v${requestVersion} · atual`;
           $('generation-state').textContent = 'Prévia concluída · continue escrevendo';
-          $('tokens').textContent = result.text_tokens != null ? result.text_tokens : '—';
+          $('token-capacity').textContent = `Concluída · ${outTokens} de ${currentReplyTokens} tokens utilizados`;
+
+          const promptTokElem = $('tokens-prompt') || $('tokens');
+          if (promptTokElem) promptTokElem.textContent = result.text_tokens != null ? result.text_tokens : '—';
+          const replyTokElem = $('tokens-reply');
+          if (replyTokElem) replyTokElem.textContent = outTokens;
+
           $('speed').textContent = result.words_s != null
             ? `${result.words_s} palavras/s`
             : (tokens_s ? `${tokens_s} tokens/s` : '—');
@@ -790,9 +1032,11 @@ async function submit(text = $('prompt').value) {
           const recordEntry = {
             ...measurement,
             preset: currentPreset,
-            max_tokens: preset.maxTokens,
-            max_prompt_tokens: preset.maxPromptTokens,
+            slider_value: currentSliderVal,
+            max_tokens: currentReplyTokens,
+            max_prompt_tokens: currentPromptTokens,
             trace_active: traceActive,
+            connectives_visible: connectivesVisible,
             ttft_ms,
             tokens_s,
             ...result
@@ -904,8 +1148,9 @@ async function health() {
 
 // Execução inicial com restauração de preferências salvas
 applyModeUI(currentMode);
-setBalancePreset(currentPreset, false);
+updateBalanceUI(currentPromptTokens, currentReplyTokens, currentSliderVal, currentPreset !== 'custom' ? currentPreset : null);
 updateTraceButton();
+updateConnectivesButton();
 updatePauseButton();
 health();
 setInterval(health, 15000);

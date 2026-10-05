@@ -263,16 +263,25 @@ def graph(text: str, answer: str = ''):
         nodes.append(dict(id=w, group=g, weight=0.25, origin='vocabulário demonstrativo'))
 
     edges = []
-    seen_edges = set()
+    edges_dict = {}
 
     def add_edge(s: str, t: str, weight: float, kind: str):
         if s == t:
             return
         pair = (s, t) if s < t else (t, s)
-        if pair in seen_edges:
+        # Se a aresta já existe com menor prioridade, 'sequência na resposta' tem precedência
+        # para que o caminho cronológico da resposta formulada seja 100% contínuo
+        kind_id = 'reply_sequence' if 'resposta' in kind else ('prompt_sequence' if 'texto' in kind else 'lexical_group')
+        if pair in edges_dict:
+            existing = edges_dict[pair]
+            if kind == 'sequência na resposta':
+                existing['kind'] = 'sequência na resposta'
+                existing['kind_id'] = 'reply_sequence'
+                existing['weight'] = max(existing['weight'], weight)
             return
-        seen_edges.add(pair)
-        edges.append(dict(source=s, target=t, weight=weight, kind=kind))
+        edge_obj = dict(source=s, target=t, weight=weight, kind=kind, kind_id=kind_id)
+        edges_dict[pair] = edge_obj
+        edges.append(edge_obj)
 
     # Conexões por proximidade de grupo conceitual (ignora conectivos para não poluir os conceitos)
     for i, node in enumerate(nodes):
@@ -282,14 +291,15 @@ def graph(text: str, answer: str = ''):
         for peer in peers:
             add_edge(peer['id'], node['id'], 0.5, 'grupo lexical')
 
-    # Conexões por sequência natural das frases digitadas
+    # Conexões por sequência natural das frases digitadas na pergunta
     for a, b in zip(source, source[1:]):
         if a in keys and b in keys:
             add_edge(a, b, 0.8, 'sequência no texto')
 
+    # Conexões por sequência cronológica contínua da resposta da IA (precedência máxima na linha de resposta)
     for a, b in zip(reply, reply[1:]):
         if a in keys and b in keys:
-            add_edge(a, b, 0.65, 'sequência na resposta')
+            add_edge(a, b, 0.9, 'sequência na resposta')
 
     return dict(
         nodes=nodes,

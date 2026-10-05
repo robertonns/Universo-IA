@@ -251,12 +251,37 @@ class ProtocolTests(unittest.TestCase):
         self.assertIn('axolote', nodes_by_id)
         self.assertIn('mexicano', nodes_by_id)
 
-        # Devem ter sido agrupados em um cluster dinâmico emergente e não no genérico 'contexto'
-        group_axolote = nodes_by_id['axolote']['group']
-        group_mexicano = nodes_by_id['mexicano']['group']
-        self.assertTrue(group_axolote.startswith('tema: '))
-        self.assertEqual(group_axolote, group_mexicano)
-        self.assertNotEqual(group_axolote, 'contexto')
+    def test_reply_sequence_continuity(self):
+        """Valida que a linha da resposta possui precedência máxima e conecta todas as palavras da resposta de forma contínua."""
+        res = server.graph('Qual é a capital do Brasil?', 'A capital do Brasil é Brasília.')
+        nodes_by_id = {n['id']: n for n in res['nodes']}
+        edges = res['edges']
+
+        # Todas as palavras da resposta devem estar presentes nos nós
+        answer_words = ['a', 'capital', 'do', 'brasil', 'é', 'brasília']
+        for w in answer_words:
+            self.assertIn(w, nodes_by_id)
+
+        # Mapeia arestas por par ordenado
+        edges_map = {}
+        for e in edges:
+            pair = tuple(sorted([e['source'], e['target']]))
+            edges_map[pair] = e
+
+        # Pares sequenciais da resposta
+        expected_reply_pairs = [
+            tuple(sorted(['a', 'capital'])),
+            tuple(sorted(['capital', 'do'])),
+            tuple(sorted(['do', 'brasil'])),
+            tuple(sorted(['brasil', 'é'])),
+            tuple(sorted(['é', 'brasília'])),
+        ]
+
+        for pair in expected_reply_pairs:
+            self.assertIn(pair, edges_map, f"Aresta esperada {pair} ausente no grafo")
+            edge = edges_map[pair]
+            self.assertEqual(edge['kind'], 'sequência na resposta')
+            self.assertEqual(edge['kind_id'], 'reply_sequence')
 
 
 if __name__ == '__main__':

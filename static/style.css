@@ -136,11 +136,50 @@ main {
   color: var(--muted);
 }
 
-h1 {
-  font-weight: 450;
-  font-size: 32px;
-  letter-spacing: -1px;
-  margin: 7px 0 18px;
+.main-title {
+  font-weight: 550;
+  font-size: 26px;
+  letter-spacing: -0.5px;
+  margin: 12px 0 6px;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0 0 18px;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+}
+
+.examples {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.examples span {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 1px;
+  margin-right: 4px;
+}
+
+.examples button {
+  background: transparent;
+  border-color: #263142;
+  border-radius: 20px;
+  font-size: 12px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.examples button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .input-wrap {
@@ -181,11 +220,34 @@ textarea::placeholder {
   font-size: 12px;
 }
 
-.balance-control {
+.chat-note {
+  margin: 6px 0 14px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: left;
+}
+
+.balance-card {
+  background: rgba(14, 22, 34, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 14px 0 20px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.2);
+}
+
+.balance-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 14px;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.balance-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -194,8 +256,13 @@ textarea::placeholder {
   font-weight: 600;
   letter-spacing: 1.2px;
   color: var(--muted);
-  margin-right: 4px;
   text-transform: uppercase;
+}
+
+.balance-presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .balance-btn {
@@ -234,39 +301,129 @@ textarea::placeholder {
   box-shadow: 0 0 12px var(--accent-glow);
 }
 
-.chat-note {
-  margin: 7px 0 0;
+.balance-tooltip-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.balance-tooltip-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 1px dotted var(--muted);
+  border-radius: 0;
+  padding: 1px 3px;
   color: var(--muted);
   font-size: 11px;
-  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1.2;
 }
 
-.examples {
+.balance-tooltip-btn:hover,
+.balance-tooltip-btn:focus-visible {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.balance-tooltip-card {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  width: 330px;
+  max-width: 88vw;
+  background: #111a28;
+  border: 1px solid #33485f;
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 0 1px rgba(131, 222, 209, 0.3);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #c9d6e5;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.balance-tooltip-container:hover .balance-tooltip-card,
+.balance-tooltip-container:focus-within .balance-tooltip-card,
+.balance-tooltip-card.active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.tooltip-header {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.balance-tooltip-card p {
+  margin: 4px 0;
+}
+
+.balance-slider-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
   margin-top: 12px;
-  flex-wrap: wrap;
 }
 
-.examples span {
+.slider-val-label {
+  font-size: 11.5px;
   color: var(--muted);
-  font-size: 10px;
-  letter-spacing: 1px;
-  margin-right: 4px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.examples button {
-  background: transparent;
-  border-color: #263142;
-  border-radius: 20px;
-  font-size: 12px;
-  padding: 5px 12px;
+.slider-val-label strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
-.examples button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+#balance-slider {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(to right, #1d3345 0%, #305470 50%, #1d3345 100%);
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  transition: background 0.2s;
+}
+
+#balance-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #0b1521;
+  box-shadow: 0 0 8px var(--accent-glow);
+  cursor: ew-resize;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+#balance-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 12px rgba(131, 222, 209, 0.6);
+}
+
+#balance-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #0b1521;
+  box-shadow: 0 0 8px var(--accent-glow);
+  cursor: ew-resize;
 }
 
 .universe {
@@ -358,6 +515,14 @@ textarea::placeholder {
   }
 }
 
+#toggle-connectives[aria-pressed="false"] {
+  opacity: 0.55;
+  color: #718398;
+  border-color: #263342;
+  text-decoration: line-through;
+  text-decoration-color: #e55353;
+}
+
 #graph-version {
   font-size: 12px;
   color: #7e93a7;
@@ -388,15 +553,41 @@ textarea::placeholder {
 
 #legend {
   display: flex;
-  gap: 14px;
+  gap: 8px;
   flex-wrap: wrap;
+  pointer-events: auto;
+}
+
+#legend span {
+  cursor: pointer;
+  user-select: none;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+#legend span:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+#legend span.active {
+  border-color: var(--color);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5), inset 0 0 6px var(--color);
 }
 
 #legend span::before {
   content: '';
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   background: var(--color);
   border-radius: 50%;
   margin-right: 6px;
@@ -554,7 +745,7 @@ textarea::placeholder {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   padding: 20px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
