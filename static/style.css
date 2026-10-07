@@ -986,6 +986,48 @@ footer {
   }
 }
 
+/* Modo Investigativo e Tokens Interativos */
+.investigative-banner {
+  margin: 18px 0 10px;
+  padding: 10px 14px;
+  background: rgba(16, 26, 40, 0.65);
+  border: 1px solid rgba(129, 225, 208, 0.25);
+  border-left: 3px solid #81e1d0;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.investigative-banner strong {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.interactive-token {
+  display: inline;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 1px 3px;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  text-decoration: underline dotted rgba(148, 163, 184, 0.35);
+  text-underline-offset: 3px;
+}
+
+.interactive-token:hover {
+  background: rgba(255, 200, 59, 0.18);
+  color: #ffe082;
+  text-decoration: underline solid #ffc83b;
+}
+
+.interactive-token.active {
+  background: rgba(255, 200, 59, 0.32);
+  color: #fffae0;
+  box-shadow: 0 0 0 1px #ffc83b;
+  text-decoration: none;
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;

@@ -5,6 +5,16 @@ const $ = (id) => document.getElementById(id);
 
 // Paleta visual semântica para os nós 3D
 const colors = {
+  'lugar/geografia': '#f3bd7c',
+  'entidade/sociedade': '#80baff',
+  'artefato/tecnologia': '#81e1d0',
+  'processo/ação': '#fca5a5',
+  'propriedade/estado': '#fcd34d',
+  'conceito/cognição': '#c2a7ff',
+  'linguagem/comunicação': '#e899b7',
+  'economia/valor': '#86efac',
+  'ciência/natureza': '#93c5fd',
+  'tempo/medida': '#cbd5e1',
   tecnologia: '#81e1d0',
   linguagem: '#c2a7ff',
   ciência: '#80baff',
@@ -96,10 +106,13 @@ let currentSliderVal = parseInt(storage.get(STORAGE_KEYS.BALANCE_SLIDER, String(
 let traceActive = false;
 let trajectoryActive = false;
 let trajectoryStep = 0;
+let trajectoryStepStartTime = 0;
 let trajectoryTimer = null;
 let replySequence = [];
 let connectivesVisible = false;
 let activeDimension = null;
+let currentSelectedStep = null;
+let lastStepCandidates = [];
 storage.set(STORAGE_KEYS.TRACE, false);
 storage.set(STORAGE_KEYS.CONNECTIVES, false);
 
@@ -118,6 +131,7 @@ let requestAbort = null;
 // Mapa de nós e arestas no Three.js
 const nodes = new Map();
 let edgeObjects = [];
+const _cometHeadPos = new THREE.Vector3();
 
 // Configuração da cena Three.js
 const stage = $('stage');
@@ -188,7 +202,7 @@ function getNodePosition(n) {
   );
 }
 
-// Renderiza o rótulo da palavra em sprite de alta nitidez
+// Renderiza o rótulo da palavra em sprite de alta nitidez com contorno protetor de contraste
 function createLabelSprite(text, color, weight, isSubtle = false) {
   const c = document.createElement('canvas');
   c.width = 512;
@@ -197,13 +211,23 @@ function createLabelSprite(text, color, weight, isSubtle = false) {
   ctx.font = '500 36px system-ui, -apple-system, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = color;
+
+  // Borda suave de contraste em azul marinho profundo / ardósia escuro para isolar do feixe dourado
+  ctx.strokeStyle = '#090d16';
+  ctx.lineWidth = 7;
+  ctx.lineJoin = 'round';
+  ctx.strokeText(text, 256, 48, 490);
+
+  // Preenchimento branco para permitir modulação cromática nativa e ultra-rápida via GPU
+  ctx.fillStyle = '#ffffff';
   ctx.fillText(text, 256, 48, 490);
 
   const texture = new THREE.CanvasTexture(c);
   texture.minFilter = THREE.LinearFilter;
+  const baseColor = new THREE.Color(color);
   const material = new THREE.SpriteMaterial({
     map: texture,
+    color: baseColor.clone(),
     transparent: true,
     depthTest: false
   });
@@ -213,7 +237,7 @@ function createLabelSprite(text, color, weight, isSubtle = false) {
     scale *= 0.65; // Redução de ~35% para conectivos estruturais
   }
   sprite.scale.set(3.0 * scale, 0.563 * scale, 1);
-  return { sprite, scale };
+  return { sprite, scale, baseColor };
 }
 
 // Aplicação suave e performática do grafo Three.js (gerenciamento de memória e 60 FPS)
@@ -226,6 +250,7 @@ function applyGraph(graphData) {
     replySequence = graphData.reply_sequence;
     if (trajectoryActive) {
       trajectoryStep = 0;
+      trajectoryStepStartTime = performance.now();
     }
   }
 
@@ -253,15 +278,19 @@ function applyGraph(graphData) {
     const isSubtle = n.group === 'conectivos';
 
     if (!obj) {
-      const { sprite, scale } = createLabelSprite(n.id, nodeColor, n.weight, isSubtle);
+      const { sprite, scale, baseColor } = createLabelSprite(n.id, nodeColor, n.weight, isSubtle);
       root.add(sprite);
-      obj = { sprite, target: targetPos, data: n, baseScale: scale };
+      obj = { sprite, target: targetPos, data: n, baseScale: scale, baseColor };
       sprite.position.copy(targetPos).multiplyScalar(0.6);
       sprite.userData.id = n.id;
       nodes.set(n.id, obj);
     } else {
       obj.data = n;
       obj.target.copy(targetPos);
+      obj.baseColor.set(nodeColor);
+      if (!trajectoryActive) {
+        obj.sprite.material.color.copy(obj.baseColor);
+      }
       let scale = 0.85 + (n.weight || 0.5) * 0.9;
       if (isSubtle) {
         scale *= 0.65;
@@ -371,7 +400,7 @@ new ResizeObserver(resize).observe(stage);
 window.addEventListener('resize', resize);
 resize();
 
-// Loop de animação contínuo a 60 FPS com lerp suave e efeito sinapse neural
+// Loop de animação contínuo a 60 FPS com lerp suave e efeito cometa contínuo na trajetória
 function frame(time = 0) {
   requestAnimationFrame(frame);
   if (!renderer || document.hidden) return;
@@ -385,11 +414,17 @@ function frame(time = 0) {
     yaw += 0.0006;
   }
 
-  // Pré-cálculo de palavras ativas e pulso sináptico na trajetória para performance 60 FPS
+  // Pré-cálculo de palavras ativas e feixe cometa na trajetória para performance 60 FPS
   let activeReplyWords = [];
   const allReplyEdgeKeys = new Set();
-  let currentPulseEdgeKey = null;
+  const historicalEdgeKeys = new Set();
+  let activeHeadKey = null;
+  let activeHeadFromWord = null;
+  let activeHeadToWord = null;
+  let prevTailKey = null;
+  let touchedWordId = null;
   let isTrajectoryFinale = false;
+  let stepProgress = 0;
 
   if (trajectoryActive && replySequence.length > 0) {
     activeReplyWords = connectivesVisible
@@ -399,24 +434,49 @@ function frame(time = 0) {
           return nd ? nd.data.group !== 'conectivos' : !functionalTokens.has(w);
         });
 
-    if (activeReplyWords.length > 0) {
-      for (let k = 0; k < activeReplyWords.length - 1; k++) {
+    const M = activeReplyWords.length;
+    if (M > 1) {
+      for (let k = 0; k < M - 1; k++) {
         const a = activeReplyWords[k];
         const b = activeReplyWords[k + 1];
         allReplyEdgeKeys.add(a < b ? `${a}|${b}` : `${b}|${a}`);
       }
 
-      isTrajectoryFinale = (trajectoryStep >= activeReplyWords.length - 1);
+      isTrajectoryFinale = (trajectoryStep >= M - 1);
 
-      if (!isTrajectoryFinale && trajectoryStep > 0 && trajectoryStep < activeReplyWords.length) {
-        const pA = activeReplyWords[trajectoryStep - 1];
-        const pB = activeReplyWords[trajectoryStep];
-        currentPulseEdgeKey = pA < pB ? `${pA}|${pB}` : `${pB}|${pA}`;
+      const elapsed = performance.now() - trajectoryStepStartTime;
+      stepProgress = Math.min(1.0, Math.max(0.0, elapsed / 420));
+
+      if (!isTrajectoryFinale) {
+        const k = trajectoryStep;
+        activeHeadFromWord = activeReplyWords[k];
+        activeHeadToWord = activeReplyWords[k + 1];
+        activeHeadKey = (activeHeadFromWord < activeHeadToWord)
+          ? `${activeHeadFromWord}|${activeHeadToWord}`
+          : `${activeHeadToWord}|${activeHeadFromWord}`;
+
+        if (k > 0) {
+          const pA = activeReplyWords[k - 1];
+          const pB = activeReplyWords[k];
+          prevTailKey = (pA < pB) ? `${pA}|${pB}` : `${pB}|${pA}`;
+        }
+
+        if (k >= 2) {
+          for (let h = 0; h < k - 1; h++) {
+            const hA = activeReplyWords[h];
+            const hB = activeReplyWords[h + 1];
+            historicalEdgeKeys.add(hA < hB ? `${hA}|${hB}` : `${hB}|${hA}`);
+          }
+        }
+
+        touchedWordId = (k === 0 && stepProgress < 0.20)
+          ? activeHeadFromWord
+          : activeHeadToWord;
       }
     }
   }
 
-  // Atualização suave das posições e opacidades dos nós
+  // Atualização suave das posições, opacidades e cores dos nós
   for (const o of nodes.values()) {
     if (o.data.group === 'conectivos' && !connectivesVisible) {
       o.sprite.visible = false;
@@ -426,16 +486,45 @@ function frame(time = 0) {
     o.sprite.position.lerp(o.target, 0.08);
 
     let targetOpacity = 1.0;
+    let targetColor = o.baseColor;
+    let currentScale = o.baseScale;
+
     if (activeDimension) {
       // Foco isolado na dimensão selecionada na legenda
       targetOpacity = (o.data.group === activeDimension) ? 1.0 : 0.08;
     } else if (focus) {
       targetOpacity = (focus === o.data.id) ? 1.0 : 0.35;
     } else if (trajectoryActive && activeReplyWords.length > 0) {
-      // Na Trajetória: palavras ainda não alcançadas e termos externos ficam esmaecidos (0.08);
-      // palavras já visitadas e em foco permanecem 100% nítidas (1.0)
       const idx = activeReplyWords.indexOf(o.data.id);
-      targetOpacity = (idx !== -1 && idx <= trajectoryStep) ? 1.0 : 0.08;
+      if (isTrajectoryFinale) {
+        targetOpacity = (idx !== -1) ? 1.0 : 0.08;
+        if (idx !== -1) {
+          targetColor = TRACE_GOLD;
+          currentScale = o.baseScale * (1.18 + 0.06 * Math.sin(time * 0.01));
+        }
+      } else if (idx !== -1) {
+        if (o.data.id === touchedWordId) {
+          // Palavra tocada no instante: destaque dourado brilhante + pulso ampliado
+          targetOpacity = 1.0;
+          targetColor = TRACE_GOLD;
+          currentScale = o.baseScale * (1.35 + 0.10 * Math.sin(time * 0.025));
+        } else if (idx <= trajectoryStep) {
+          // Palavra já consolidada no rastro histórico: nítida e tamanho estável
+          targetOpacity = 1.0;
+          targetColor = o.baseColor;
+          currentScale = o.baseScale * 1.10;
+        } else {
+          // Palavra ainda não alcançada na trajetória
+          targetOpacity = 0.08;
+          targetColor = o.baseColor;
+          currentScale = o.baseScale;
+        }
+      } else {
+        // Palavra fora da sequência de resposta
+        targetOpacity = 0.08;
+        targetColor = o.baseColor;
+        currentScale = o.baseScale;
+      }
     } else if (traceActive) {
       const isReplyWord = !!(o.data.in_reply || o.data.origin === 'resposta');
       targetOpacity = isReplyWord ? 1.0 : 0.08;
@@ -444,20 +533,8 @@ function frame(time = 0) {
     }
 
     o.sprite.material.opacity += (targetOpacity - o.sprite.material.opacity) * 0.15;
-
-    // Escala dinâmica na Trajetória passo a passo
-    let currentScale = o.baseScale;
-    if (trajectoryActive && activeReplyWords.length > 0) {
-      const idx = activeReplyWords.indexOf(o.data.id);
-      if (idx !== -1) {
-        if (idx === trajectoryStep) {
-          // Palavra em formulação ativa no instante (pulso ampliado)
-          currentScale = o.baseScale * (1.30 + 0.08 * Math.sin(time * 0.015));
-        } else if (idx < trajectoryStep) {
-          // Palavra já consolidada na linha de pensamento (leve destaque nítido)
-          currentScale = o.baseScale * 1.10;
-        }
-      }
+    if (targetColor) {
+      o.sprite.material.color.lerp(targetColor, 0.20);
     }
     o.sprite.scale.set(3.0 * currentScale, 0.563 * currentScale, 1);
   }
@@ -488,13 +565,14 @@ function frame(time = 0) {
     const a = edge.userData.sourceNode.sprite.position;
     const b = edge.userData.targetNode.sprite.position;
     const pos = edge.geometry.attributes.position;
-    pos.setXYZ(0, a.x, a.y, a.z);
-    pos.setXYZ(1, b.x, b.y, b.z);
-    pos.needsUpdate = true;
 
     const isSequenceReply = (edge.userData.kind_id === 'reply_sequence' || edge.userData.kind === 'sequência na resposta');
 
     if (traceActive) {
+      pos.setXYZ(0, a.x, a.y, a.z);
+      pos.setXYZ(1, b.x, b.y, b.z);
+      pos.needsUpdate = true;
+
       if (isSequenceReply) {
         edge.material.color.copy(TRACE_GOLD);
         edge.material.opacity = pulseOpacity;
@@ -507,23 +585,64 @@ function frame(time = 0) {
         ? `${edge.userData.source}|${edge.userData.target}`
         : `${edge.userData.target}|${edge.userData.source}`;
 
-      const isCurrentPulseEdge = (currentPulseEdgeKey && pairKey === currentPulseEdgeKey);
-      const isFinaleReplyEdge = (isTrajectoryFinale && allReplyEdgeKeys.has(pairKey));
+      if (isTrajectoryFinale) {
+        // Clímax final: todas as conexões da resposta acendem simultaneamente em dourado
+        pos.setXYZ(0, a.x, a.y, a.z);
+        pos.setXYZ(1, b.x, b.y, b.z);
+        pos.needsUpdate = true;
 
-      if (isFinaleReplyEdge) {
-        // Clímax final: todas as conexões da resposta acendem simultaneamente em dourado pulsante
-        edge.material.color.copy(TRACE_GOLD);
-        edge.material.opacity = 0.88;
-      } else if (isCurrentPulseEdge) {
-        // Pulso sináptico viajante: apenas a conexão do passo atual acende em dourado
+        if (allReplyEdgeKeys.has(pairKey)) {
+          edge.material.color.copy(TRACE_GOLD);
+          edge.material.opacity = 0.88;
+        } else {
+          edge.material.color.copy(edge.userData.baseColor);
+          edge.material.opacity += (0.02 - edge.material.opacity) * 0.15;
+        }
+      } else if (activeHeadKey && pairKey === activeHeadKey) {
+        // Feixe ativo (crescendo progressivamente em TRACE_GOLD de W_k para W_{k+1})
+        const fromNode = nodes.get(activeHeadFromWord);
+        const toNode = nodes.get(activeHeadToWord);
+        if (fromNode && toNode) {
+          const fromPos = fromNode.sprite.position;
+          const toPos = toNode.sprite.position;
+          _cometHeadPos.lerpVectors(fromPos, toPos, stepProgress);
+          pos.setXYZ(0, fromPos.x, fromPos.y, fromPos.z);
+          pos.setXYZ(1, _cometHeadPos.x, _cometHeadPos.y, _cometHeadPos.z);
+          pos.needsUpdate = true;
+        } else {
+          pos.setXYZ(0, a.x, a.y, a.z);
+          pos.setXYZ(1, b.x, b.y, b.z);
+          pos.needsUpdate = true;
+        }
         edge.material.color.copy(TRACE_GOLD);
         edge.material.opacity = 0.95;
+      } else if (prevTailKey && pairKey === prevTailKey) {
+        // Conexão anterior (feixe dourado decrescente: transição suave para cor temática do grupo, opacidade 0.95 -> 0.50)
+        pos.setXYZ(0, a.x, a.y, a.z);
+        pos.setXYZ(1, b.x, b.y, b.z);
+        pos.needsUpdate = true;
+        edge.material.color.copy(TRACE_GOLD).lerp(edge.userData.baseColor, stepProgress);
+        edge.material.opacity = 0.95 - (0.45 * stepProgress);
+      } else if (historicalEdgeKeys.has(pairKey)) {
+        // Conexões históricas (já percorridas anteriormente: visíveis na cor temática do grupo com opacidade 0.50)
+        pos.setXYZ(0, a.x, a.y, a.z);
+        pos.setXYZ(1, b.x, b.y, b.z);
+        pos.needsUpdate = true;
+        edge.material.color.copy(edge.userData.baseColor);
+        edge.material.opacity = 0.50;
       } else {
-        // Demais arestas (e arestas anteriores já percorridas) permanecem esmaecidas/transparentes
+        // Demais arestas inativas (fundo esmaecido a 0.02)
+        pos.setXYZ(0, a.x, a.y, a.z);
+        pos.setXYZ(1, b.x, b.y, b.z);
+        pos.needsUpdate = true;
         edge.material.color.copy(edge.userData.baseColor);
         edge.material.opacity += (0.02 - edge.material.opacity) * 0.15;
       }
     } else if (activeDimension) {
+      pos.setXYZ(0, a.x, a.y, a.z);
+      pos.setXYZ(1, b.x, b.y, b.z);
+      pos.needsUpdate = true;
+
       const matchSource = edge.userData.sourceNode.data.group === activeDimension;
       const matchTarget = edge.userData.targetNode.data.group === activeDimension;
       if (matchSource && matchTarget) {
@@ -534,6 +653,10 @@ function frame(time = 0) {
         edge.material.opacity += (0.02 - edge.material.opacity) * 0.15;
       }
     } else {
+      pos.setXYZ(0, a.x, a.y, a.z);
+      pos.setXYZ(1, b.x, b.y, b.z);
+      pos.needsUpdate = true;
+
       edge.material.color.copy(edge.userData.baseColor);
       const targetEdgeOpacity = focus
         ? ((edge.userData.source === focus || edge.userData.target === focus) ? 0.6 : 0.04)
@@ -663,9 +786,31 @@ function updateTrajectoryButton() {
   btn.classList.toggle('active', trajectoryActive);
 }
 
+function resetTrajectoryVisuals() {
+  for (const o of nodes.values()) {
+    if (o.sprite && o.baseColor) {
+      o.sprite.material.color.copy(o.baseColor);
+      o.sprite.scale.set(3.0 * o.baseScale, 0.563 * o.baseScale, 1);
+      o.sprite.material.opacity = 1.0;
+    }
+  }
+  for (let i = 0; i < edgeObjects.length; i++) {
+    const edge = edgeObjects[i];
+    const a = edge.userData.sourceNode.sprite.position;
+    const b = edge.userData.targetNode.sprite.position;
+    const pos = edge.geometry.attributes.position;
+    pos.setXYZ(0, a.x, a.y, a.z);
+    pos.setXYZ(1, b.x, b.y, b.z);
+    pos.needsUpdate = true;
+    edge.material.color.copy(edge.userData.baseColor);
+    edge.material.opacity = 0.15;
+  }
+}
+
 function startTrajectory() {
   trajectoryActive = true;
   trajectoryStep = 0;
+  trajectoryStepStartTime = performance.now();
   clearInterval(trajectoryTimer);
   updateTrajectoryButton();
 
@@ -686,9 +831,11 @@ function startTrajectory() {
         });
     if (!activeWords.length) return;
     trajectoryStep++;
+    trajectoryStepStartTime = performance.now();
     // Permanece com a constelação completa acesa por ~1.7s (4 passos de 420ms) antes de reiniciar suavemente
     if (trajectoryStep >= activeWords.length + 3) {
       trajectoryStep = 0;
+      trajectoryStepStartTime = performance.now();
     }
   }, 420);
 }
@@ -698,6 +845,7 @@ function stopTrajectory() {
   trajectoryStep = 0;
   clearInterval(trajectoryTimer);
   updateTrajectoryButton();
+  resetTrajectoryVisuals();
 }
 
 const btnTrajectory = $('trajectory-btn');
@@ -913,6 +1061,23 @@ function renderCandidates(target, mass, items, total) {
   }
 }
 
+// Atualiza apenas os painéis laterais de candidatos (diretos e indiretos)
+function updateCandidatesPanel(items) {
+  if (!items || !items.length) {
+    renderCandidates($('candidates-direct'), $('mass-direct'), [], 1);
+    renderCandidates($('candidates-indirect'), $('mass-indirect'), [], 1);
+    return;
+  }
+
+  const direct = items.filter(item => functionalTokens.has(item.token.trim().toLowerCase())).slice(0, 10);
+  const indirect = items.filter(item => !functionalTokens.has(item.token.trim().toLowerCase())).slice(0, 10);
+  const shown = [...direct, ...indirect];
+  const total = shown.reduce((sum, item) => sum + item.probability, 0) || 1;
+
+  renderCandidates($('candidates-direct'), $('mass-direct'), direct, total);
+  renderCandidates($('candidates-indirect'), $('mass-indirect'), indirect, total);
+}
+
 // Distribuição e projeção de nós de probabilidade no Three.js
 function candidates(items) {
   if (pendingGraph && answerVersion === version) {
@@ -930,19 +1095,61 @@ function candidates(items) {
     });
   }
 
-  if (!items || !items.length) {
-    renderCandidates($('candidates-direct'), $('mass-direct'), [], 1);
-    renderCandidates($('candidates-indirect'), $('mass-indirect'), [], 1);
+  updateCandidatesPanel(items);
+}
+
+// Renderiza a resposta com tokens interativos clicáveis para inspeção passo a passo (Modo Investigativo)
+function renderInteractiveAnswer(text, stepCandidates) {
+  const answerElem = $('answer');
+  if (!answerElem) return;
+
+  lastStepCandidates = Array.isArray(stepCandidates) ? stepCandidates : [];
+  currentSelectedStep = null;
+
+  if (!lastStepCandidates.length) {
+    answerElem.textContent = text || '';
     return;
   }
 
-  const direct = items.filter(item => functionalTokens.has(item.token.toLowerCase())).slice(0, 10);
-  const indirect = items.filter(item => !functionalTokens.has(item.token.toLowerCase())).slice(0, 10);
-  const shown = [...direct, ...indirect];
-  const total = shown.reduce((sum, item) => sum + item.probability, 0) || 1;
+  answerElem.replaceChildren();
 
-  renderCandidates($('candidates-direct'), $('mass-direct'), direct, total);
-  renderCandidates($('candidates-indirect'), $('mass-indirect'), indirect, total);
+  lastStepCandidates.forEach((stepItem, idx) => {
+    const span = document.createElement('span');
+    span.className = 'interactive-token';
+    span.textContent = stepItem.token || '';
+    span.dataset.step = String(idx);
+    span.title = `Passo ${idx + 1}: clique para ver as probabilidades concorrentes avaliadas pela IA`;
+
+    span.onclick = (e) => {
+      e.stopPropagation();
+      selectStepCandidate(idx);
+    };
+
+    answerElem.appendChild(span);
+  });
+}
+
+function selectStepCandidate(idx) {
+  if (!lastStepCandidates || !lastStepCandidates[idx]) return;
+
+  const spans = $('answer').querySelectorAll('.interactive-token');
+  if (currentSelectedStep === idx) {
+    // Ao clicar novamente no mesmo token, desseleciona e restaura o último passo
+    currentSelectedStep = null;
+    spans.forEach(s => s.classList.remove('active'));
+    if (lastStepCandidates.length) {
+      updateCandidatesPanel(lastStepCandidates[lastStepCandidates.length - 1].candidates || []);
+    }
+    return;
+  }
+
+  currentSelectedStep = idx;
+  spans.forEach(s => {
+    s.classList.toggle('active', s.dataset.step === String(idx));
+  });
+
+  const stepItem = lastStepCandidates[idx];
+  updateCandidatesPanel(stepItem.candidates || []);
 }
 
 // Requisições HTTP e SSE Streaming
@@ -1001,6 +1208,8 @@ async function submit(text = $('prompt').value) {
   if (!text.trim()) {
     applyGraph({ nodes: [], edges: [], groups: [] });
     $('answer').textContent = 'Sua resposta aparecerá aqui e será reformulada enquanto você escreve.';
+    lastStepCandidates = [];
+    currentSelectedStep = null;
     $('generation-state').textContent = 'Aguardando contexto';
     $('answer-version').textContent = '—';
     $('words').textContent = '0';
@@ -1107,7 +1316,7 @@ async function submit(text = $('prompt').value) {
             ? Math.round((outTokens / totalDurationSec) * 10) / 10
             : null;
 
-          $('answer').textContent = result.answer || $('answer').textContent;
+          renderInteractiveAnswer(result.answer, result.step_candidates);
           $('answer-version').textContent = `v${requestVersion} · atual`;
           $('generation-state').textContent = 'Prévia concluída · continue escrevendo';
           $('token-capacity').textContent = `Concluída · ${outTokens} de ${currentReplyTokens} tokens utilizados`;
@@ -1190,7 +1399,7 @@ for (const b of document.querySelectorAll('[data-example]')) {
   };
 }
 
-// Exportação de medições JSON com telemetria detalhada
+// Exportação de medições JSON com telemetria detalhada e visão em duas camadas (Macro + Rastro Investigativo)
 $('export').onclick = () => {
   const exportPayload = {
     prototype: '0.1',
@@ -1203,7 +1412,27 @@ $('export').onclick = () => {
       connectives_visible: connectivesVisible,
       paused: paused
     },
-    records
+    records: records.map(rec => ({
+      visao_macro: {
+        pergunta: rec.text,
+        resposta_completa: rec.answer,
+        modo: rec.mode,
+        preset: rec.preset,
+        slider_value: rec.slider_value,
+        telemetria: {
+          ttft_ms: rec.ttft_ms,
+          tokens_s: rec.tokens_s,
+          words_s: rec.words_s,
+          text_tokens: rec.text_tokens,
+          output_tokens: rec.output_tokens,
+          max_tokens_config: rec.max_tokens_config,
+          max_prompt_tokens: rec.max_prompt_tokens
+        },
+        ultimos_candidatos: rec.candidates || [],
+        grafo_3d: rec.graph || null
+      },
+      rastro_investigativo_passo_a_passo: rec.step_candidates || []
+    }))
   };
   const blob = new Blob(
     [JSON.stringify(exportPayload, null, 2)],

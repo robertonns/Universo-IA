@@ -188,6 +188,97 @@ CANDIDATE_RE = re.compile(r'[A-Za-zÀ-ÿ]{2,}')
 GROUPS_SET = {g: set(words_list) for g, words_list in GROUPS.items()}
 ALL_GROUP_WORDS = set().union(*GROUPS_SET.values())
 
+# Ontologia Semântica Estruturada: Hiperônimos de Nível Intermediário
+# Mapeia conceitos específicos para ~10 a 12 grandes pilares estáveis, reduzindo fragmentação da legenda
+INTERMEDIATE_HYPERNYMS = {
+    'lugar/geografia': {
+        'brasil', 'brasília', 'país', 'cidade', 'capital', 'estado', 'nação', 'terra', 'planeta',
+        'região', 'distrito', 'federal', 'continente', 'território', 'mundo', 'espaço', 'órbita',
+        'rio', 'mar', 'oceano', 'floresta', 'planalto', 'metrópole', 'sul', 'norte', 'leste', 'oeste',
+        'tóquio', 'paris', 'japão', 'frança', 'hotel', 'destino', 'paisagem'
+    },
+    'entidade/sociedade': {
+        'sociedade', 'comunidade', 'povo', 'humano', 'humanidade', 'cidadão', 'cidadania',
+        'população', 'governo', 'democracia', 'civilização', 'público', 'presidente', 'autoridade',
+        'ministério', 'instituição', 'empresa', 'indústria', 'coletivo', 'família', 'grupo', 'pessoa',
+        'pessoas', 'tribunal', 'juiz', 'advogado', 'paciente'
+    },
+    'artefato/tecnologia': {
+        'computador', 'modelo', 'algoritmo', 'software', 'hardware', 'servidor', 'dispositivo',
+        'máquina', 'rede', 'código', 'sistema', 'automação', 'ferramenta', 'veículo', 'instrumento',
+        'computação', 'digital', 'telescópio', 'satélite', 'foguete'
+    },
+    'processo/ação': {
+        'processamento', 'aprendizado', 'treinamento', 'desenvolvimento', 'construção', 'fundação',
+        'movimento', 'transformação', 'criação', 'produção', 'operação', 'transmissão', 'pesquisa',
+        'exercício', 'competição', 'partida', 'treino', 'corrida', 'jogo'
+    },
+    'propriedade/estado': {
+        'complexidade', 'capacidade', 'potencial', 'qualidade', 'dimensão', 'velocidade', 'tamanho',
+        'estrutura', 'forma', 'padrão', 'estabilidade', 'condição', 'localizada', 'central', 'maior',
+        'vitalidade', 'bem-estar', 'legal', 'jurídico'
+    },
+    'conceito/cognição': {
+        'mente', 'cérebro', 'pensamento', 'consciência', 'memória', 'neurônio', 'cognição', 'ideia',
+        'inteligência', 'raciocínio', 'sabedoria', 'verdade', 'lógica', 'teoria', 'hipótese',
+        'compreensão', 'entendimento', 'filosofia', 'ética', 'moral', 'justiça', 'arte', 'beleza',
+        'estética', 'harmonia', 'música', 'criatividade', 'poesia'
+    },
+    'linguagem/comunicação': {
+        'linguagem', 'palavra', 'palavras', 'texto', 'frase', 'leitura', 'escrita', 'fala', 'significado',
+        'contexto', 'semântica', 'gramática', 'sintaxe', 'discurso', 'mensagem', 'diálogo', 'notícia',
+        'comunicação', 'mídia', 'jornalismo', 'relato', 'voz', 'canal'
+    },
+    'economia/valor': {
+        'economia', 'mercado', 'dinheiro', 'moeda', 'preço', 'valor', 'custo', 'investimento',
+        'finanças', 'banco', 'crédito', 'renda', 'trabalho', 'capitalismo', 'comércio', 'inflação',
+        'negócio'
+    },
+    'ciência/natureza': {
+        'ciência', 'física', 'química', 'biologia', 'evolução', 'energia', 'átomo', 'molécula',
+        'natureza', 'ambiente', 'vida', 'animal', 'planta', 'ecologia', 'clima', 'biodiversidade',
+        'saúde', 'medicina', 'médico', 'doença', 'cura', 'tratamento', 'astronomia', 'astro',
+        'estrela', 'galáxia', 'sol', 'lua'
+    },
+    'tempo/medida': {
+        'tempo', 'ano', 'anos', 'século', 'década', 'período', 'época', 'história', 'número',
+        'taxa', 'medida', 'grau', 'escala', 'dia', 'manhã', 'noite', 'horário'
+    }
+}
+
+GROUP_TO_HYPERNYM = {
+    'tecnologia': 'artefato/tecnologia',
+    'linguagem': 'linguagem/comunicação',
+    'comunicação': 'linguagem/comunicação',
+    'ciência': 'ciência/natureza',
+    'natureza': 'ciência/natureza',
+    'espaço': 'ciência/natureza',
+    'saúde': 'ciência/natureza',
+    'mente': 'conceito/cognição',
+    'filosofia': 'conceito/cognição',
+    'arte': 'conceito/cognição',
+    'sociedade': 'entidade/sociedade',
+    'direito': 'entidade/sociedade',
+    'cotidiano': 'entidade/sociedade',
+    'economia': 'economia/valor',
+    'viagem': 'lugar/geografia',
+    'esporte': 'processo/ação'
+}
+
+
+def resolve_word_group(word: str) -> str:
+    """Classifica a palavra pelo hiperônimo intermediário estruturado ou taxonomia correlata."""
+    w = word.lower().strip()
+    if w in CONNECTIVES:
+        return 'conectivos'
+    for hyper, terms in INTERMEDIATE_HYPERNYMS.items():
+        if w in terms:
+            return hyper
+    for grp, terms in GROUPS_SET.items():
+        if w in terms:
+            return GROUP_TO_HYPERNYM.get(grp, grp)
+    return None
+
 
 def words(text: str):
     """Extrai palavras limpas com suporte a caracteres acentuados da língua portuguesa."""
@@ -223,20 +314,47 @@ def normalize_dynamic_group(word: str) -> str:
     return f'conceito: {w}'
 
 
-def graph(text: str, answer: str = ''):
+def graph(text: str, answer: str = '', step_candidates: list = None):
     """
-    Heurística lexical determinística e rápida para alimentar o Three.js.
-    Destaca termos do texto de entrada e da resposta gerada, organizando conexões por
-    grupos conceituais, sequências de frases e clusters dinâmicos com conectivos estruturais.
+    Heurística lexical e probabilística para alimentar a cena Three.js.
+    Destaca termos do texto de entrada, resposta formulada e alternativas concorrentes
+    ponderadas pela LLM, agrupadas por hiperônimos intermediários estáveis.
     """
     source = [w for w in words(text) if (w in CONNECTIVES or (w not in STOP and (len(w) > 2 or w in ALL_GROUP_WORDS)))]
     reply = [w for w in words(answer) if (w in CONNECTIVES or (w not in STOP and (len(w) > 2 or w in ALL_GROUP_WORDS)))]
 
-    # Ampla cobertura de termos da resposta para enriquecer a exploração visual
-    keys = list(dict.fromkeys(source + reply))[-110:]
+    # 1. Extração dos termos de conteúdo mais votados pela LLM (piso >= 3%, máx 3 por passo, sem conectivos/pontuação)
+    real_candidates_list = []
+    seen_cand_words = set(source + reply)
+    if step_candidates:
+        for step in step_candidates:
+            cands = step.get('candidates') or []
+            step_valid = []
+            for c in cands:
+                p = c.get('probability', 0.0)
+                if p < 0.03:
+                    continue
+                tok = c.get('token', '').strip().lower()
+                clean_toks = words(tok)
+                if not clean_toks:
+                    continue
+                w = clean_toks[0]
+                if len(w) >= 3 and w not in CONNECTIVES and w not in STOP and w not in seen_cand_words:
+                    seen_cand_words.add(w)
+                    step_valid.append((w, p))
+                    if len(step_valid) >= 3:
+                        break
+            real_candidates_list.extend(step_valid)
+
+    # Limite saudável de alternativas concorrentes na nuvem para manter 60 FPS
+    cand_nodes_data = real_candidates_list[:40]
+    cand_words = [w for w, _ in cand_nodes_data]
+    cand_prob_map = dict(cand_nodes_data)
+
+    keys = list(dict.fromkeys(source + reply + cand_words))[-110:]
 
     # Identificação de termos desconhecidos para formação de cluster dinâmico emergente por oração
-    unknown_keys = [w for w in keys if w not in CONNECTIVES and not any(w in s for s in GROUPS_SET.values())]
+    unknown_keys = [w for w in keys if w not in CONNECTIVES and resolve_word_group(w) is None]
     dynamic_group_map = {}
     if unknown_keys:
         full_text = f"{text}\n{answer}"
@@ -270,9 +388,19 @@ def graph(text: str, answer: str = ''):
 
     active = [g for g, vocab_set in GROUPS_SET.items() if any(w in vocab_set for w in source + reply)]
 
+    # Âncoras discretas de apoio da taxonomia (máximo 3 termos por grupo ativo, com desduplicação estrita)
     expanded = []
+    all_known_keys = set(keys)
     for g in active:
-        expanded.extend([(w, g) for w in GROUPS[g][:10] if w not in keys])
+        group_terms = []
+        for w in GROUPS[g]:
+            if w not in all_known_keys:
+                all_known_keys.add(w)
+                hyper_name = GROUP_TO_HYPERNYM.get(g, g)
+                group_terms.append((w, hyper_name))
+                if len(group_terms) >= 3:
+                    break
+        expanded.extend(group_terms)
 
     nodes = []
     for w in keys:
@@ -280,26 +408,36 @@ def graph(text: str, answer: str = ''):
             g = 'conectivos'
             weight = 0.22
             origin = 'conectivo'
+            prob = None
         else:
-            g = next((group_name for group_name, vocab_set in GROUPS_SET.items() if w in vocab_set), None)
+            g = resolve_word_group(w)
             if g is None:
                 g = dynamic_group_map.get(w, normalize_dynamic_group(w))
             if w in source:
                 weight = min(1.0, 0.50 + 0.12 * source.count(w))
                 origin = 'entrada'
-            else:
+                prob = None
+            elif w in reply:
                 weight = min(0.95, 0.42 + 0.08 * reply.count(w))
                 origin = 'resposta'
-        nodes.append(dict(
+                prob = None
+            else:
+                prob = cand_prob_map.get(w, 0.05)
+                weight = min(0.85, max(0.30, round(prob * 1.5, 2)))
+                origin = 'alternativa concorrente'
+        node_dict = dict(
             id=w,
             group=g,
             weight=round(weight, 2),
             origin=origin,
             in_reply=(w in reply),
             in_source=(w in source)
-        ))
+        )
+        if prob is not None:
+            node_dict['probability'] = round(prob * 100, 1)
+        nodes.append(node_dict)
 
-    for w, g in expanded[:50]:
+    for w, g in expanded[:30]:
         nodes.append(dict(
             id=w,
             group=g,
@@ -475,19 +613,28 @@ async def api_generate(data: dict):
                 'O mapa 3D organiza os conceitos por afinidade e sequência. '
                 'Para gerar respostas reais e ver probabilidades ao vivo, ative o Modo Modelo Local.'
             )
-            for fragment in re.findall(r'\S+\s*', answer):
-                yield event('chunk', text=fragment, candidates=[])
+            demo_tokens = re.findall(r'\S+\s*', answer)
+            demo_history = []
+            for d_idx, fragment in enumerate(demo_tokens):
+                cands = [
+                    dict(token=' ' + fragment.strip(), probability=0.88),
+                    dict(token=' conceito', probability=0.06),
+                    dict(token=' universo', probability=0.04)
+                ]
+                demo_history.append(dict(token=fragment, step=d_idx, candidates=cands))
+                yield event('chunk', text=fragment, candidates=cands, step_index=d_idx)
                 await asyncio.sleep(0.025)
 
             elapsed = max(0.01, time.perf_counter() - started)
             yield event(
                 'done',
                 answer=answer,
-                graph=graph(text, answer),
-                candidates=[],
+                graph=graph(text, answer, step_candidates=demo_history),
+                candidates=demo_history[-1]['candidates'] if demo_history else [],
+                step_candidates=demo_history,
                 max_tokens_config=max_tokens,
                 ttft_ms=None,
-                output_tokens=len(re.findall(r'\S+\s*', answer)),
+                output_tokens=len(demo_tokens),
                 text_tokens=prompt_words_count,
                 words_s=round(len(words(answer)) / elapsed, 1)
             )
@@ -495,6 +642,7 @@ async def api_generate(data: dict):
 
         answer = ''
         latest_candidates = []
+        step_history = []
         output_tokens = 0
         ttft_ms = None
         client = get_client()
@@ -584,19 +732,37 @@ async def api_generate(data: dict):
                         if logs:
                             output_tokens += len(logs)
                             latest_candidates = readable_candidates(logs[-1].get('top_logprobs', []))
+                            if fragment:
+                                step_history.append(dict(
+                                    token=fragment,
+                                    step=len(step_history),
+                                    candidates=latest_candidates
+                                ))
+                        elif fragment:
+                            step_history.append(dict(
+                                token=fragment,
+                                step=len(step_history),
+                                candidates=latest_candidates
+                            ))
                         if fragment or logs:
                             if ttft_ms is None:
                                 ttft_ms = round((time.perf_counter() - started) * 1000, 1)
                         if fragment:
                             answer += fragment
-                            yield event('chunk', text=fragment, candidates=latest_candidates)
+                            yield event(
+                                'chunk',
+                                text=fragment,
+                                candidates=latest_candidates,
+                                step_index=len(step_history) - 1
+                            )
 
             elapsed = max(0.01, time.perf_counter() - started)
             yield event(
                 'done',
                 answer=answer,
-                graph=graph(text, answer),
+                graph=graph(text, answer, step_candidates=step_history),
                 candidates=latest_candidates,
+                step_candidates=step_history,
                 max_tokens_config=max_tokens,
                 ttft_ms=ttft_ms,
                 text_tokens=prompt_count or len(words(text)),

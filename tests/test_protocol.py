@@ -229,9 +229,9 @@ class ProtocolTests(unittest.TestCase):
             self.assertEqual(nodes_by_id[conn]['weight'], 0.22)
             self.assertEqual(nodes_by_id[conn]['origin'], 'conectivo')
 
-        # Conceitos continuam preservados com grupos semânticos
+        # Conceitos continuam preservados com grupos semânticos (hiperônimos intermediários)
         self.assertIn('inteligência', nodes_by_id)
-        self.assertEqual(nodes_by_id['inteligência']['group'], 'tecnologia')
+        self.assertIn(nodes_by_id['inteligência']['group'], ('conceito/cognição', 'artefato/tecnologia'))
 
     def test_16_groups_and_dynamic_clusters(self):
         """Valida existência das 16 famílias universais, normalização morfológica e posicionamento dos clusters dinâmicos ao final da legenda."""
@@ -317,14 +317,42 @@ class ProtocolTests(unittest.TestCase):
         cross_triangle_pair = tuple(sorted(['capital', 'brasília']))
         self.assertNotIn(cross_triangle_pair, edges_map, f"Aresta cruzada {cross_triangle_pair} não deveria existir no grafo")
 
-        # Valida que 'conectivos' e domínios não relacionados (como 'economia') NÃO aparecem na legenda
+        # Valida que 'conectivos' e domínios não relacionados NÃO aparecem na legenda
         self.assertNotIn('conectivos', res['groups'])
         self.assertNotIn('economia', res['groups'])
-        self.assertIn('sociedade', res['groups'])
+        self.assertNotIn('economia/valor', res['groups'])
+        self.assertTrue(
+            any(g in res['groups'] for g in ('lugar/geografia', 'entidade/sociedade', 'sociedade')),
+            "Deveria conter hiperônimo de geografia ou sociedade na legenda"
+        )
 
         # Valida que 'capital' pertence exclusivamente a 'sociedade' e não a 'economia'
         self.assertIn('capital', server.GROUPS['sociedade'])
         self.assertNotIn('capital', server.GROUPS['economia'])
+
+    def test_step_candidates_and_real_tokens_in_graph(self):
+        """Valida que o histórico de candidatos reais da LLM é integrado à nuvem 3D com desduplicação e limite por passo."""
+        mock_steps = [
+            {
+                'token': ' capital',
+                'step': 0,
+                'candidates': [
+                    {'token': ' capital', 'probability': 0.85},
+                    {'token': ' cidade', 'probability': 0.10},
+                    {'token': ' metrópole', 'probability': 0.04},
+                    {'token': ' centro', 'probability': 0.01}  # < 0.03, deve ser descartado
+                ]
+            }
+        ]
+        res = server.graph('Qual o país?', 'A capital', step_candidates=mock_steps)
+        nodes_by_id = {n['id']: n for n in res['nodes']}
+        # 'cidade' e 'metrópole' devem ter entrado como alternativas concorrentes com prob >= 3%
+        self.assertIn('cidade', nodes_by_id)
+        self.assertEqual(nodes_by_id['cidade']['origin'], 'alternativa concorrente')
+        self.assertEqual(nodes_by_id['cidade']['probability'], 10.0)
+        self.assertIn('metrópole', nodes_by_id)
+        # 'centro' teve prob 1%, não deve entrar
+        self.assertNotIn('centro', nodes_by_id)
 
 
 if __name__ == '__main__':
