@@ -385,9 +385,12 @@ function frame(time = 0) {
     yaw += 0.0006;
   }
 
-  // Pré-cálculo de palavras ativas e arestas percorridas na trajetória para performance 60 FPS
+  // Pré-cálculo de palavras ativas e pulso sináptico na trajetória para performance 60 FPS
   let activeReplyWords = [];
-  const traversedEdgeKeys = new Set();
+  const allReplyEdgeKeys = new Set();
+  let currentPulseEdgeKey = null;
+  let isTrajectoryFinale = false;
+
   if (trajectoryActive && replySequence.length > 0) {
     activeReplyWords = connectivesVisible
       ? replySequence
@@ -395,10 +398,21 @@ function frame(time = 0) {
           const nd = nodes.get(w);
           return nd ? nd.data.group !== 'conectivos' : !functionalTokens.has(w);
         });
-    for (let sIdx = 0; sIdx < trajectoryStep && sIdx < activeReplyWords.length - 1; sIdx++) {
-      const a = activeReplyWords[sIdx];
-      const b = activeReplyWords[sIdx + 1];
-      traversedEdgeKeys.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+
+    if (activeReplyWords.length > 0) {
+      for (let k = 0; k < activeReplyWords.length - 1; k++) {
+        const a = activeReplyWords[k];
+        const b = activeReplyWords[k + 1];
+        allReplyEdgeKeys.add(a < b ? `${a}|${b}` : `${b}|${a}`);
+      }
+
+      isTrajectoryFinale = (trajectoryStep >= activeReplyWords.length - 1);
+
+      if (!isTrajectoryFinale && trajectoryStep > 0 && trajectoryStep < activeReplyWords.length) {
+        const pA = activeReplyWords[trajectoryStep - 1];
+        const pB = activeReplyWords[trajectoryStep];
+        currentPulseEdgeKey = pA < pB ? `${pA}|${pB}` : `${pB}|${pA}`;
+      }
     }
   }
 
@@ -417,6 +431,11 @@ function frame(time = 0) {
       targetOpacity = (o.data.group === activeDimension) ? 1.0 : 0.08;
     } else if (focus) {
       targetOpacity = (focus === o.data.id) ? 1.0 : 0.35;
+    } else if (trajectoryActive && activeReplyWords.length > 0) {
+      // Na Trajetória: palavras ainda não alcançadas e termos externos ficam esmaecidos (0.08);
+      // palavras já visitadas e em foco permanecem 100% nítidas (1.0)
+      const idx = activeReplyWords.indexOf(o.data.id);
+      targetOpacity = (idx !== -1 && idx <= trajectoryStep) ? 1.0 : 0.08;
     } else if (traceActive) {
       const isReplyWord = !!(o.data.in_reply || o.data.origin === 'resposta');
       targetOpacity = isReplyWord ? 1.0 : 0.08;
@@ -432,11 +451,11 @@ function frame(time = 0) {
       const idx = activeReplyWords.indexOf(o.data.id);
       if (idx !== -1) {
         if (idx === trajectoryStep) {
-          // Palavra em formulação ativa no instante
-          currentScale = o.baseScale * (1.28 + 0.08 * Math.sin(time * 0.015));
+          // Palavra em formulação ativa no instante (pulso ampliado)
+          currentScale = o.baseScale * (1.30 + 0.08 * Math.sin(time * 0.015));
         } else if (idx < trajectoryStep) {
-          // Palavra já consolidada na linha de pensamento
-          currentScale = o.baseScale * 1.12;
+          // Palavra já consolidada na linha de pensamento (leve destaque nítido)
+          currentScale = o.baseScale * 1.10;
         }
       }
     }
@@ -487,12 +506,22 @@ function frame(time = 0) {
       const pairKey = edge.userData.source < edge.userData.target
         ? `${edge.userData.source}|${edge.userData.target}`
         : `${edge.userData.target}|${edge.userData.source}`;
-      if (traversedEdgeKeys.has(pairKey)) {
+
+      const isCurrentPulseEdge = (currentPulseEdgeKey && pairKey === currentPulseEdgeKey);
+      const isFinaleReplyEdge = (isTrajectoryFinale && allReplyEdgeKeys.has(pairKey));
+
+      if (isFinaleReplyEdge) {
+        // Clímax final: todas as conexões da resposta acendem simultaneamente em dourado pulsante
         edge.material.color.copy(TRACE_GOLD);
         edge.material.opacity = 0.88;
+      } else if (isCurrentPulseEdge) {
+        // Pulso sináptico viajante: apenas a conexão do passo atual acende em dourado
+        edge.material.color.copy(TRACE_GOLD);
+        edge.material.opacity = 0.95;
       } else {
+        // Demais arestas (e arestas anteriores já percorridas) permanecem esmaecidas/transparentes
         edge.material.color.copy(edge.userData.baseColor);
-        edge.material.opacity += (0.15 - edge.material.opacity) * 0.15;
+        edge.material.opacity += (0.02 - edge.material.opacity) * 0.15;
       }
     } else if (activeDimension) {
       const matchSource = edge.userData.sourceNode.data.group === activeDimension;
@@ -657,11 +686,11 @@ function startTrajectory() {
         });
     if (!activeWords.length) return;
     trajectoryStep++;
-    // Permanece com o caminho completo visível por ~1.2s (4 passos de 300ms) antes de reiniciar o loop do rastro
-    if (trajectoryStep >= activeWords.length + 4) {
+    // Permanece com a constelação completa acesa por ~1.7s (4 passos de 420ms) antes de reiniciar suavemente
+    if (trajectoryStep >= activeWords.length + 3) {
       trajectoryStep = 0;
     }
-  }, 300);
+  }, 420);
 }
 
 function stopTrajectory() {
