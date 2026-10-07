@@ -1106,6 +1106,11 @@ function renderInteractiveAnswer(text, stepCandidates) {
   lastStepCandidates = Array.isArray(stepCandidates) ? stepCandidates : [];
   currentSelectedStep = null;
 
+  const ebDir = $('eyebrow-direct');
+  if (ebDir) ebDir.textContent = 'PRÓXIMOS TOKENS — DIRETOS';
+  const ebInd = $('eyebrow-indirect');
+  if (ebInd) ebInd.textContent = 'PRÓXIMOS TOKENS — INDIRETOS';
+
   if (!lastStepCandidates.length) {
     answerElem.textContent = text || '';
     return;
@@ -1118,7 +1123,8 @@ function renderInteractiveAnswer(text, stepCandidates) {
     span.className = 'interactive-token';
     span.textContent = stepItem.token || '';
     span.dataset.step = String(idx);
-    span.title = `Passo ${idx + 1}: clique para ver as probabilidades concorrentes avaliadas pela IA`;
+    const tokenDisplay = (stepItem.token || '').trim();
+    span.title = `Token "${tokenDisplay}": clique para investigar os próximos tokens avaliados pela IA`;
 
     span.onclick = (e) => {
       e.stopPropagation();
@@ -1133,6 +1139,9 @@ function selectStepCandidate(idx) {
   if (!lastStepCandidates || !lastStepCandidates[idx]) return;
 
   const spans = $('answer').querySelectorAll('.interactive-token');
+  const ebDir = $('eyebrow-direct');
+  const ebInd = $('eyebrow-indirect');
+
   if (currentSelectedStep === idx) {
     // Ao clicar novamente no mesmo token, desseleciona e restaura o último passo
     currentSelectedStep = null;
@@ -1140,6 +1149,8 @@ function selectStepCandidate(idx) {
     if (lastStepCandidates.length) {
       updateCandidatesPanel(lastStepCandidates[lastStepCandidates.length - 1].candidates || []);
     }
+    if (ebDir) ebDir.textContent = 'PRÓXIMOS TOKENS — DIRETOS';
+    if (ebInd) ebInd.textContent = 'PRÓXIMOS TOKENS — INDIRETOS';
     return;
   }
 
@@ -1148,8 +1159,21 @@ function selectStepCandidate(idx) {
     s.classList.toggle('active', s.dataset.step === String(idx));
   });
 
-  const stepItem = lastStepCandidates[idx];
-  updateCandidatesPanel(stepItem.candidates || []);
+  // O usuário está investigando os próximos tokens que a IA cogitou logo APÓS o token clicado (passo idx + 1)
+  const clickedToken = (lastStepCandidates[idx]?.token || '').trim();
+  const nextStepIdx = idx + 1;
+  const targetStepItem = (nextStepIdx < lastStepCandidates.length)
+    ? lastStepCandidates[nextStepIdx]
+    : lastStepCandidates[idx];
+
+  if (ebDir) {
+    ebDir.textContent = clickedToken ? `PRÓXIMOS TOKENS APÓS "${clickedToken}" — DIRETOS` : 'PRÓXIMOS TOKENS — DIRETOS';
+  }
+  if (ebInd) {
+    ebInd.textContent = clickedToken ? `PRÓXIMOS TOKENS APÓS "${clickedToken}" — INDIRETOS` : 'PRÓXIMOS TOKENS — INDIRETOS';
+  }
+
+  updateCandidatesPanel(targetStepItem?.candidates || []);
 }
 
 // Requisições HTTP e SSE Streaming
@@ -1210,6 +1234,10 @@ async function submit(text = $('prompt').value) {
     $('answer').textContent = 'Sua resposta aparecerá aqui e será reformulada enquanto você escreve.';
     lastStepCandidates = [];
     currentSelectedStep = null;
+    const ebDir = $('eyebrow-direct');
+    if (ebDir) ebDir.textContent = 'PRÓXIMOS TOKENS — DIRETOS';
+    const ebInd = $('eyebrow-indirect');
+    if (ebInd) ebInd.textContent = 'PRÓXIMOS TOKENS — INDIRETOS';
     $('generation-state').textContent = 'Aguardando contexto';
     $('answer-version').textContent = '—';
     $('words').textContent = '0';
@@ -1270,6 +1298,10 @@ async function submit(text = $('prompt').value) {
     $('notice').textContent = 'Modo Demonstração ativo. Navegação 3D sem necessidade do modelo em execução.';
   }
   candidates([]);
+  const ebDir = $('eyebrow-direct');
+  if (ebDir) ebDir.textContent = 'PRÓXIMOS TOKENS — DIRETOS';
+  const ebInd = $('eyebrow-indirect');
+  if (ebInd) ebInd.textContent = 'PRÓXIMOS TOKENS — INDIRETOS';
   const initPromptTok = $('tokens-prompt') || $('tokens');
   if (initPromptTok) initPromptTok.textContent = '—';
   const initReplyTok = $('tokens-reply');

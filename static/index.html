@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Universo IA - Por dentro de um modelo de linguagem</title>
-  <link rel="stylesheet" href="/style.css?v=0.5.0">
+  <link rel="stylesheet" href="/style.css?v=0.5.1">
 </head>
 <body>
   <header>
@@ -117,7 +117,7 @@
     <section class="predictions-grid">
       <aside class="predictions">
         <div class="panel-title">
-          <span class="eyebrow">PRÓXIMOS TOKENS — DIRETOS</span>
+          <span class="eyebrow" id="eyebrow-direct">PRÓXIMOS TOKENS — DIRETOS</span>
           <span id="mass-direct">—</span>
         </div>
         <p class="explain">Artigos, preposições, pronomes e advérbios.</p>
@@ -126,7 +126,7 @@
 
       <aside class="predictions">
         <div class="panel-title">
-          <span class="eyebrow">PRÓXIMOS TOKENS — INDIRETOS</span>
+          <span class="eyebrow" id="eyebrow-indirect">PRÓXIMOS TOKENS — INDIRETOS</span>
           <span id="mass-indirect">—</span>
         </div>
         <p class="explain">Palavras de conteúdo: conceitos, ações e qualificadores.</p>
@@ -213,6 +213,6 @@
     </footer>
   </main>
 
-  <script type="module" src="/app.js?v=0.5.0"></script>
+  <script type="module" src="/app.js?v=0.5.1"></script>
 </body>
 </html>

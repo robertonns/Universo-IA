@@ -354,6 +354,65 @@ class ProtocolTests(unittest.TestCase):
         # 'centro' teve prob 1%, não deve entrar
         self.assertNotIn('centro', nodes_by_id)
 
+    def test_subword_fragments_and_duplicate_stems_rejected(self):
+        """Valida que fragmentos de sub-tokens BPE e prefixos de palavras já na resposta são estritamente rejeitados."""
+        mock_steps = [
+            {
+                'token': ' intelig',
+                'step': 0,
+                'candidates': [
+                    {'token': ' intelig', 'probability': 0.90},  # Prefixo de "inteligência" (já na resposta) -> deve ser descartado
+                    {'token': ' cognição', 'probability': 0.08}   # Palavra inteira independente -> deve ser aceita
+                ]
+            },
+            {
+                'token': 'ência',
+                'step': 1,
+                'candidates': [
+                    {'token': 'ência', 'probability': 0.95},     # Sufixo sem leading space -> deve ser descartado
+                    {'token': 'ente', 'probability': 0.04}       # Sufixo sem leading space -> deve ser descartado
+                ]
+            },
+            {
+                'token': ' aprend',
+                'step': 2,
+                'candidates': [
+                    {'token': ' aprend', 'probability': 0.70},   # Prefixo de "aprendizado" (já na resposta) -> deve ser descartado
+                    {'token': ' estudo', 'probability': 0.15}    # Palavra inteira independente -> deve ser aceita
+                ]
+            },
+            {
+                'token': 'izado',
+                'step': 3,
+                'candidates': [
+                    {'token': 'izado', 'probability': 0.99}      # Sufixo sem leading space -> deve ser descartado
+                ]
+            }
+        ]
+        answer = 'A inteligência artificial requer aprendizado constante.'
+        res = server.graph('Como funciona a IA?', answer, step_candidates=mock_steps)
+        node_ids = {n['id'] for n in res['nodes']}
+
+        # As palavras completas da resposta devem estar presentes
+        self.assertIn('inteligência', node_ids)
+        self.assertIn('aprendizado', node_ids)
+
+        # As alternativas completas independentes devem estar presentes
+        self.assertIn('cognição', node_ids)
+        self.assertIn('estudo', node_ids)
+
+        # Fragmentos, sufixos e prefixos cortados NÃO devem estar presentes na nuvem 3D
+        self.assertNotIn('intelig', node_ids, "Prefixo 'intelig' não deveria estar na nuvem 3D")
+        self.assertNotIn('ência', node_ids, "Sufixo 'ência' não deveria estar na nuvem 3D")
+        self.assertNotIn('aprend', node_ids, "Prefixo 'aprend' não deveria estar na nuvem 3D")
+        self.assertNotIn('izado', node_ids, "Sufixo 'izado' não deveria estar na nuvem 3D")
+
+        # Nenhum grupo rogue com nome 'conceito: intelig' ou 'conceito: aprend' deve existir
+        for g in res['groups']:
+            self.assertFalse(g.startswith('conceito: intelig'), f"Grupo rogue {g} encontrado")
+            self.assertFalse(g.startswith('conceito: aprend'), f"Grupo rogue {g} encontrado")
+            self.assertFalse(g.startswith('conceito: ência'), f"Grupo rogue {g} encontrado")
+
 
 if __name__ == '__main__':
     unittest.main()

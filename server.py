@@ -290,12 +290,29 @@ def readable_candidates(items):
     clean = []
     seen = set()
     for item in items:
-        token = str(item.get('token', '')).strip()
+        raw_token = str(item.get('token', ''))
+        token = raw_token.strip()
         if not CANDIDATE_RE.search(token) or token in seen:
             continue
         seen.add(token)
-        clean.append(dict(token=token, probability=math.exp(item['logprob'])))
+        has_space = raw_token.startswith((' ', ' ', 'Ġ', '\t', '\n')) or (len(raw_token) > len(raw_token.lstrip()))
+        clean.append(dict(
+            token=token,
+            raw_token=raw_token,
+            probability=math.exp(item['logprob']),
+            is_word_start=has_space
+        ))
     return clean
+
+
+def fallback_hypernym(word: str) -> str:
+    """Enquadra termos de conteúdo não mapeados diretamente nos 10 hiperônimos estáveis."""
+    w = word.lower().strip()
+    if w.endswith(('nte', 'vel', 'oso', 'osa', 'az', 'il', 'ivo', 'iva', 'al', 'ico', 'ica')):
+        return 'propriedade/estado'
+    if w.endswith(('ar', 'er', 'ir', 'ando', 'endo', 'indo', 'ou', 'eu', 'iu', 'aria', 'eria', 'iria', 'asse', 'esse', 'isse', 'am', 'em')):
+        return 'processo/ação'
+    return 'conceito/cognição'
 
 
 def normalize_dynamic_group(word: str) -> str:
@@ -323,9 +340,11 @@ def graph(text: str, answer: str = '', step_candidates: list = None):
     source = [w for w in words(text) if (w in CONNECTIVES or (w not in STOP and (len(w) > 2 or w in ALL_GROUP_WORDS)))]
     reply = [w for w in words(answer) if (w in CONNECTIVES or (w not in STOP and (len(w) > 2 or w in ALL_GROUP_WORDS)))]
 
-    # 1. Extração dos termos de conteúdo mais votados pela LLM (piso >= 3%, máx 3 por passo, sem conectivos/pontuação)
+    # 1. Extração de palavras de conteúdo reais concorrentes (piso >= 3%, máx 3 por passo, sem sufixos cortados)
     real_candidates_list = []
+    existing_content_words = {ew for ew in (source + reply) if ew not in CONNECTIVES and len(ew) >= 3}
     seen_cand_words = set(source + reply)
+
     if step_candidates:
         for step in step_candidates:
             cands = step.get('candidates') or []
@@ -334,20 +353,41 @@ def graph(text: str, answer: str = '', step_candidates: list = None):
                 p = c.get('probability', 0.0)
                 if p < 0.03:
                     continue
-                tok = c.get('token', '').strip().lower()
+
+                # Exige que seja início de palavra (descarte estrito de sufixos/miolos como "ência", "izado", "ados", "agem")
+                raw_tok = str(c.get('raw_token') or c.get('token') or '')
+                is_start = c.get('is_word_start')
+                if is_start is None:
+                    is_start = raw_tok.startswith((' ', ' ', 'Ġ', '\t', '\n')) or (len(raw_tok) > len(raw_tok.lstrip()))
+                if not is_start:
+                    continue
+
+                tok = raw_tok.strip().lower()
                 clean_toks = words(tok)
                 if not clean_toks:
                     continue
                 w = clean_toks[0]
-                if len(w) >= 3 and w not in CONNECTIVES and w not in STOP and w not in seen_cand_words:
-                    seen_cand_words.add(w)
-                    step_valid.append((w, p))
-                    if len(step_valid) >= 3:
-                        break
+
+                if len(w) < 3 or w in CONNECTIVES or w in STOP or w in seen_cand_words:
+                    continue
+
+                # Bloqueio de substrings/prefixos de palavras já existentes
+                # (ex.: bloqueia "aprend" quando já existe "aprendizado", bloqueia "intelig" se já há "inteligência")
+                if any(
+                    (w.startswith(ew) or ew.startswith(w) or w.endswith(ew) or ew.endswith(w))
+                    for ew in existing_content_words
+                    if ew != w and len(ew) >= 3 and len(w) >= 3
+                ):
+                    continue
+
+                seen_cand_words.add(w)
+                step_valid.append((w, p))
+                if len(step_valid) >= 3:
+                    break
             real_candidates_list.extend(step_valid)
 
     # Limite saudável de alternativas concorrentes na nuvem para manter 60 FPS
-    cand_nodes_data = real_candidates_list[:40]
+    cand_nodes_data = real_candidates_list[:30]
     cand_words = [w for w, _ in cand_nodes_data]
     cand_prob_map = dict(cand_nodes_data)
 
@@ -381,10 +421,14 @@ def graph(text: str, answer: str = '', step_candidates: list = None):
                         if neighbor not in visited:
                             visited.add(neighbor)
                             queue.append(neighbor)
-                root = min(comp, key=lambda x: keys.index(x))
-                group_name = normalize_dynamic_group(root)
-                for member in comp:
-                    dynamic_group_map[member] = group_name
+                if len(comp) >= 2:
+                    root = min(comp, key=lambda x: keys.index(x))
+                    group_name = normalize_dynamic_group(root)
+                    for member in comp:
+                        dynamic_group_map[member] = group_name
+                else:
+                    # Palavra desconhecida isolada: acomoda no pilar intermediário padrão correspondente
+                    dynamic_group_map[w] = fallback_hypernym(w)
 
     active = [g for g, vocab_set in GROUPS_SET.items() if any(w in vocab_set for w in source + reply)]
 
@@ -412,7 +456,7 @@ def graph(text: str, answer: str = '', step_candidates: list = None):
         else:
             g = resolve_word_group(w)
             if g is None:
-                g = dynamic_group_map.get(w, normalize_dynamic_group(w))
+                g = dynamic_group_map.get(w, fallback_hypernym(w))
             if w in source:
                 weight = min(1.0, 0.50 + 0.12 * source.count(w))
                 origin = 'entrada'

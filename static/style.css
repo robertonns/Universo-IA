@@ -601,20 +601,26 @@ textarea::placeholder {
 
 #legend {
   display: flex;
-  gap: 8px;
+  gap: 3px 6px;
   flex-wrap: wrap;
+  max-height: 48px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  align-items: center;
   pointer-events: auto;
 }
 
 #legend span {
   cursor: pointer;
   user-select: none;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 2px 7px;
+  border-radius: 5px;
   border: 1px solid transparent;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   display: inline-flex;
   align-items: center;
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 #legend span:hover {
@@ -1007,23 +1013,24 @@ footer {
 .interactive-token {
   display: inline;
   cursor: pointer;
-  border-radius: 3px;
-  padding: 1px 3px;
-  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  margin: 0;
+  padding: 1px 0;
+  border-radius: 2px;
   text-decoration: underline dotted rgba(148, 163, 184, 0.35);
   text-underline-offset: 3px;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
 .interactive-token:hover {
-  background: rgba(255, 200, 59, 0.18);
+  background: rgba(255, 200, 59, 0.22);
   color: #ffe082;
   text-decoration: underline solid #ffc83b;
 }
 
 .interactive-token.active {
-  background: rgba(255, 200, 59, 0.32);
+  background: rgba(255, 200, 59, 0.35);
   color: #fffae0;
-  box-shadow: 0 0 0 1px #ffc83b;
+  box-shadow: 0 0 0 1px rgba(255, 200, 59, 0.85);
   text-decoration: none;
   font-weight: 600;
 }
