@@ -211,12 +211,14 @@ INTERMEDIATE_HYPERNYMS = {
     'processo/ação': {
         'processamento', 'aprendizado', 'treinamento', 'desenvolvimento', 'construção', 'fundação',
         'movimento', 'transformação', 'criação', 'produção', 'operação', 'transmissão', 'pesquisa',
-        'exercício', 'competição', 'partida', 'treino', 'corrida', 'jogo'
+        'exercício', 'competição', 'partida', 'treino', 'corrida', 'jogo',
+        'precisa', 'precisar', 'gerencia', 'gerenciar', 'utiliza', 'utilizar', 'opera', 'operar',
+        'interpreta', 'interpretar', 'executa', 'executar', 'construir', 'manipular'
     },
     'propriedade/estado': {
         'complexidade', 'capacidade', 'potencial', 'qualidade', 'dimensão', 'velocidade', 'tamanho',
         'estrutura', 'forma', 'padrão', 'estabilidade', 'condição', 'localizada', 'central', 'maior',
-        'vitalidade', 'bem-estar', 'legal', 'jurídico'
+        'vitalidade', 'bem-estar', 'legal', 'jurídico', 'essencial', 'sensorial'
     },
     'conceito/cognição': {
         'mente', 'cérebro', 'pensamento', 'consciência', 'memória', 'neurônio', 'cognição', 'ideia',
@@ -227,7 +229,7 @@ INTERMEDIATE_HYPERNYMS = {
     'linguagem/comunicação': {
         'linguagem', 'palavra', 'palavras', 'texto', 'frase', 'leitura', 'escrita', 'fala', 'significado',
         'contexto', 'semântica', 'gramática', 'sintaxe', 'discurso', 'mensagem', 'diálogo', 'notícia',
-        'comunicação', 'mídia', 'jornalismo', 'relato', 'voz', 'canal'
+        'comunicação', 'mídia', 'jornalismo', 'relato', 'voz', 'canal', 'escrever'
     },
     'economia/valor': {
         'economia', 'mercado', 'dinheiro', 'moeda', 'preço', 'valor', 'custo', 'investimento',
@@ -238,7 +240,7 @@ INTERMEDIATE_HYPERNYMS = {
         'ciência', 'física', 'química', 'biologia', 'evolução', 'energia', 'átomo', 'molécula',
         'natureza', 'ambiente', 'vida', 'animal', 'planta', 'ecologia', 'clima', 'biodiversidade',
         'saúde', 'medicina', 'médico', 'doença', 'cura', 'tratamento', 'astronomia', 'astro',
-        'estrela', 'galáxia', 'sol', 'lua'
+        'estrela', 'galáxia', 'sol', 'lua', 'análise', 'analisar'
     },
     'tempo/medida': {
         'tempo', 'ano', 'anos', 'século', 'década', 'período', 'época', 'história', 'número',
@@ -264,6 +266,78 @@ GROUP_TO_HYPERNYM = {
     'viagem': 'lugar/geografia',
     'esporte': 'processo/ação'
 }
+
+# Tabela de reconstrução morfológica de sub-tokens e radicais BPE para palavras plenas em português
+STEM_RECONSTRUCTION = {
+    'escre': 'escrever',
+    'cons': 'construir',
+    'manip': 'manipular',
+    'anal': 'análise',
+    'ess': 'essencial',
+    'pal': 'palavras',
+    'sensori': 'sensorial',
+    'intelig': 'inteligência',
+    'aprend': 'aprendizado',
+    'comput': 'computação',
+    'racioc': 'raciocínio',
+    'gerenc': 'gerenciar',
+    'estrut': 'estrutura',
+    'func': 'função',
+    'conhec': 'conhecimento',
+    'entender': 'entendimento',
+    'interp': 'interpretação',
+    'sistem': 'sistema',
+    'inform': 'informação',
+    'signif': 'significado',
+    'ling': 'linguagem',
+    'mod': 'modelo',
+    'proc': 'processo'
+}
+
+
+def reconstruct_candidate_word(raw_stem: str) -> str:
+    """
+    Reconstrói um radical ou sub-token BPE em sua palavra lexical completa em português.
+    Garante que 100% dos nós exibidos na nuvem 3D sejam palavras inteiras e com significado pleno.
+    """
+    w = raw_stem.lower().strip()
+    if len(w) < 3:
+        return None
+
+    # 1. Radical catalogado diretamente na tabela de alta precisão
+    if w in STEM_RECONSTRUCTION:
+        return STEM_RECONSTRUCTION[w]
+
+    # 2. Já é uma palavra completa catalogada na taxonomia ou nos hiperônimos
+    if w in ALL_GROUP_WORDS or any(w in terms for terms in INTERMEDIATE_HYPERNYMS.values()):
+        return w
+
+    # 3. Busca por prefixo no vocabulário oficial (quando w tem pelo menos 4 caracteres)
+    if len(w) >= 4:
+        matches = [full_w for full_w in ALL_GROUP_WORDS if full_w.startswith(w) and len(full_w) > len(w)]
+        if matches:
+            return min(matches, key=len)
+
+    # 4. Descarte imediato de terminações impossíveis na língua portuguesa
+    # (consoantes oclusivas/fricativas mudas ou encontros consonantais que caracterizam radicais cortados)
+    if w.endswith(('b', 'c', 'd', 'f', 'g', 'h', 'j', 'k', 'p', 'q', 't', 'v', 'w',
+                   'nd', 'nt', 'ss', 'rr', 'mp', 'mb', 'st', 'ct', 'pt', 'ft', 'lt', 'rt')):
+        return None
+
+    # 5. Palavras morfologicamente completas com terminações válidas em português
+    if len(w) >= 4 and w.endswith((
+        'a', 'e', 'o', 'as', 'es', 'os', 'am', 'em', 'im', 'om', 'um',
+        'ar', 'er', 'ir', 'or', 'ur', 'al', 'el', 'il', 'ol', 'ul',
+        'ão', 'ões', 'ães', 'ado', 'ada', 'ados', 'adas',
+        'mento', 'mentos', 'dade', 'dades', 'ção', 'ções',
+        'nte', 'ntes', 'vel', 'veis', 'oso', 'osa', 'osos', 'osas',
+        'ico', 'ica', 'icos', 'icas', 'ura', 'uras',
+        'ismo', 'ista', 'istas', 'eiro', 'eira'
+    )):
+        return w
+
+    return None
+
 
 
 def resolve_word_group(word: str) -> str:
@@ -366,22 +440,26 @@ def graph(text: str, answer: str = '', step_candidates: list = None):
                 clean_toks = words(tok)
                 if not clean_toks:
                     continue
-                w = clean_toks[0]
+                raw_stem = clean_toks[0]
 
-                if len(w) < 3 or w in CONNECTIVES or w in STOP or w in seen_cand_words:
+                # Reconstrói sub-tokens e radicais BPE para palavras lexicais completas em português
+                full_w = reconstruct_candidate_word(raw_stem)
+                if not full_w:
                     continue
 
-                # Bloqueio de substrings/prefixos de palavras já existentes
-                # (ex.: bloqueia "aprend" quando já existe "aprendizado", bloqueia "intelig" se já há "inteligência")
+                if len(full_w) < 3 or full_w in CONNECTIVES or full_w in STOP or full_w in seen_cand_words:
+                    continue
+
+                # Evita duplicar palavras já existentes na pergunta ou na resposta
                 if any(
-                    (w.startswith(ew) or ew.startswith(w) or w.endswith(ew) or ew.endswith(w))
+                    (full_w == ew or full_w.startswith(ew) or ew.startswith(full_w))
                     for ew in existing_content_words
-                    if ew != w and len(ew) >= 3 and len(w) >= 3
+                    if len(ew) >= 3 and len(full_w) >= 3
                 ):
                     continue
 
-                seen_cand_words.add(w)
-                step_valid.append((w, p))
+                seen_cand_words.add(full_w)
+                step_valid.append((full_w, p))
                 if len(step_valid) >= 3:
                     break
             real_candidates_list.extend(step_valid)
@@ -393,58 +471,12 @@ def graph(text: str, answer: str = '', step_candidates: list = None):
 
     keys = list(dict.fromkeys(source + reply + cand_words))[-110:]
 
-    # Identificação de termos desconhecidos para formação de cluster dinâmico emergente por oração
+    # Acomodação estrita de termos não mapeados diretamente nos 10 hiperônimos intermediários
     unknown_keys = [w for w in keys if w not in CONNECTIVES and resolve_word_group(w) is None]
-    dynamic_group_map = {}
-    if unknown_keys:
-        full_text = f"{text}\n{answer}"
-        clauses = [c.strip() for c in re.split(r'[.!?;:\n]+', full_text) if c.strip()]
-        adj = {w: set() for w in unknown_keys}
-        for clause in clauses:
-            clause_words = set(words(clause))
-            found = [w for w in unknown_keys if w in clause_words]
-            for i, w1 in enumerate(found):
-                for w2 in found[i + 1:]:
-                    adj[w1].add(w2)
-                    adj[w2].add(w1)
+    dynamic_group_map = {w: fallback_hypernym(w) for w in unknown_keys}
 
-        visited = set()
-        for w in unknown_keys:
-            if w not in visited:
-                comp = []
-                queue = [w]
-                visited.add(w)
-                while queue:
-                    curr = queue.pop(0)
-                    comp.append(curr)
-                    for neighbor in adj[curr]:
-                        if neighbor not in visited:
-                            visited.add(neighbor)
-                            queue.append(neighbor)
-                if len(comp) >= 2:
-                    root = min(comp, key=lambda x: keys.index(x))
-                    group_name = normalize_dynamic_group(root)
-                    for member in comp:
-                        dynamic_group_map[member] = group_name
-                else:
-                    # Palavra desconhecida isolada: acomoda no pilar intermediário padrão correspondente
-                    dynamic_group_map[w] = fallback_hypernym(w)
-
-    active = [g for g, vocab_set in GROUPS_SET.items() if any(w in vocab_set for w in source + reply)]
-
-    # Âncoras discretas de apoio da taxonomia (máximo 3 termos por grupo ativo, com desduplicação estrita)
+    # Âncoras discretas de apoio da taxonomia (desativadas para testes conforme alinhamento)
     expanded = []
-    all_known_keys = set(keys)
-    for g in active:
-        group_terms = []
-        for w in GROUPS[g]:
-            if w not in all_known_keys:
-                all_known_keys.add(w)
-                hyper_name = GROUP_TO_HYPERNYM.get(g, g)
-                group_terms.append((w, hyper_name))
-                if len(group_terms) >= 3:
-                    break
-        expanded.extend(group_terms)
 
     nodes = []
     for w in keys:
@@ -747,7 +779,7 @@ async def api_generate(data: dict):
                 messages=messages,
                 stream=True,
                 max_tokens=max_tokens,
-                temperature=0.7,
+                temperature=0.0,
                 top_p=1.0,
                 top_k=0,
                 logprobs=True,

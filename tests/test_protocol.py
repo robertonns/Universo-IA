@@ -251,19 +251,15 @@ class ProtocolTests(unittest.TestCase):
         self.assertIn('axolote', nodes_by_id)
         self.assertIn('mexicano', nodes_by_id)
 
-        # Valida que grupos desconhecidos recebem prefixo morfológico padronizado ('conceito:', 'ação:', 'qualidade:')
+        # Valida que termos desconhecidos são consolidados estritamente nos 10 hiperônimos estáveis
         axolote_group = nodes_by_id['axolote']['group']
-        self.assertTrue(
-            any(axolote_group.startswith(p) for p in ('conceito:', 'ação:', 'qualidade:')),
-            f"Grupo '{axolote_group}' não segue padrão de normalização morfológica"
+        self.assertIn(
+            axolote_group,
+            server.INTERMEDIATE_HYPERNYMS.keys(),
+            f"Grupo '{axolote_group}' deve pertencer aos 10 hiperônimos estáveis"
         )
-
-        # Valida ordenação da legenda: grupos dinâmicos devem estar no final (à direita)
-        groups = res['groups']
-        dynamic_indices = [i for i, g in enumerate(groups) if any(g.startswith(p) for p in ('conceito:', 'ação:', 'qualidade:', 'tema:'))]
-        standard_indices = [i for i, g in enumerate(groups) if not any(g.startswith(p) for p in ('conceito:', 'ação:', 'qualidade:', 'tema:'))]
-        if dynamic_indices and standard_indices:
-            self.assertGreater(min(dynamic_indices), max(standard_indices), "Grupos dinâmicos devem estar obrigatoriamente após os grupos estáveis")
+        # Garante que nenhum grupo rogue com prefixo 'conceito: ' é criado
+        self.assertFalse(any(g.startswith('conceito: ') for g in res['groups']), "Nenhum grupo com 'conceito: ' deve existir")
 
     def test_reply_sequence_continuity(self):
         """Valida que a linha da resposta possui precedência máxima, conecta todas as palavras da resposta de forma contínua e gera atalhos de conteúdo quando conectivos estiverem ocultos."""
@@ -413,7 +409,51 @@ class ProtocolTests(unittest.TestCase):
             self.assertFalse(g.startswith('conceito: aprend'), f"Grupo rogue {g} encontrado")
             self.assertFalse(g.startswith('conceito: ência'), f"Grupo rogue {g} encontrado")
 
+    def test_stem_reconstruction_and_no_static_anchors(self):
+        """Valida que radicais BPE ('escre', 'manip', 'cons') são reconstruídos para palavras plenas e nenhuma âncora estática é injetada."""
+        # Teste unitário direto da função de reconstrução
+        self.assertEqual(server.reconstruct_candidate_word('escre'), 'escrever')
+        self.assertEqual(server.reconstruct_candidate_word('manip'), 'manipular')
+        self.assertEqual(server.reconstruct_candidate_word('cons'), 'construir')
+        self.assertEqual(server.reconstruct_candidate_word('anal'), 'análise')
+        self.assertEqual(server.reconstruct_candidate_word('ess'), 'essencial')
+        self.assertEqual(server.reconstruct_candidate_word('pal'), 'palavras')
+        self.assertEqual(server.reconstruct_candidate_word('sensori'), 'sensorial')
+        # Fragmento sem sentido ou menor que 3 letras
+        self.assertIsNone(server.reconstruct_candidate_word('ab'))
+        self.assertIsNone(server.reconstruct_candidate_word('xpzt'))
+
+        # Teste de integração com o grafo
+        mock_steps = [
+            {
+                'token': ' IA',
+                'step': 0,
+                'candidates': [
+                    {'token': ' escre', 'probability': 0.18},
+                    {'token': ' manip', 'probability': 0.12},
+                    {'token': ' cons', 'probability': 0.10}
+                ]
+            }
+        ]
+        res = server.graph('Como a IA processa texto?', 'A IA processa texto com lógica.', step_candidates=mock_steps)
+        node_ids = {n['id'] for n in res['nodes']}
+
+        # Radicais devem estar reconstruídos como palavras completas
+        self.assertIn('escrever', node_ids)
+        self.assertIn('manipular', node_ids)
+        self.assertIn('construir', node_ids)
+
+        # Radicais cortados NÃO devem estar presentes
+        self.assertNotIn('escre', node_ids)
+        self.assertNotIn('manip', node_ids)
+        self.assertNotIn('cons', node_ids)
+
+        # Nenhuma âncora estática 'vocabulário demonstrativo' deve estar presente
+        demonstrative_nodes = [n for n in res['nodes'] if n.get('origin') == 'vocabulário demonstrativo']
+        self.assertEqual(len(demonstrative_nodes), 0, "Âncoras estáticas demonstrativas devem estar inativas")
+
 
 if __name__ == '__main__':
     unittest.main()
+
 

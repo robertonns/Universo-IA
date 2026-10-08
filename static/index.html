@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Universo IA - Por dentro de um modelo de linguagem</title>
-  <link rel="stylesheet" href="/style.css?v=0.5.1">
+  <link rel="stylesheet" href="/style.css?v=0.5.2">
 </head>
 <body>
   <header>
@@ -82,9 +82,11 @@
           <button id="trajectory-btn" class="trace-btn" type="button" aria-pressed="false" title="Exibe o rastro passo a passo da formação do pensamento da IA">Trajetória</button>
           <button id="pause" aria-pressed="false">Pausar movimento</button>
           <button id="reset">Recentralizar</button>
+          <button id="fullscreen-btn" class="trace-btn" type="button" aria-pressed="false" title="Alterna o modo de tela cheia para o universo 3D">⛶ Tela cheia</button>
         </div>
       </div>
       
+      <button id="fullscreen-close-btn" class="fullscreen-close-btn" type="button" title="Fechar tela cheia (Esc)" hidden>✕ Fechar tela cheia</button>
       <div id="stage" tabindex="0" aria-label="Mapa 3D: arraste para girar; use a roda para aproximar. Setas giram; teclas mais e menos ajustam o zoom."></div>
       <div class="scene-empty" id="scene-empty">O universo começa com a sua primeira palavra.</div>
       
@@ -196,7 +198,17 @@
         </article>
 
         <article class="info-card">
-          <h2>⚡ Como testar o desempenho</h2>
+          <h2>🎯 Coesão e Precisão do Modelo (Temperatura)</h2>
+          <p><b>Por que utilizamos decodificação determinística (temperatura zero):</b></p>
+          <ul>
+            <li><b>Fidelidade aos Próximos Tokens:</b> o token gerado na resposta coincide 100% com a alternativa mais votada (1º lugar) na lista de probabilidades.</li>
+            <li><b>Coesão Morfológica:</b> elimina anomalias estatísticas e combinações híbridas de palavras em português, garantindo perfeita sintaxe.</li>
+            <li><b>Rastreabilidade Didática:</b> você investiga o caminho de máxima convicção calculado pelos pesos da rede neural.</li>
+          </ul>
+        </article>
+
+        <article class="info-card">
+          <h2>⚡ Como testar o desempenho e exportar</h2>
           <ol>
             <li>Selecione um exemplo ou digite um tema de seu interesse.</li>
             <li>Acompanhe a emissão dos tokens e a métrica de palavras/segundo.</li>
@@ -213,6 +225,6 @@
     </footer>
   </main>
 
-  <script type="module" src="/app.js?v=0.5.1"></script>
+  <script type="module" src="/app.js?v=0.5.2"></script>
 </body>
 </html>

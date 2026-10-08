@@ -214,7 +214,7 @@ function createLabelSprite(text, color, weight, isSubtle = false) {
 
   // Borda suave de contraste em azul marinho profundo / ardósia escuro para isolar do feixe dourado
   ctx.strokeStyle = '#090d16';
-  ctx.lineWidth = 7;
+  ctx.lineWidth = 3.5;
   ctx.lineJoin = 'round';
   ctx.strokeText(text, 256, 48, 490);
 
@@ -234,7 +234,7 @@ function createLabelSprite(text, color, weight, isSubtle = false) {
   const sprite = new THREE.Sprite(material);
   let scale = 0.85 + (weight || 0.5) * 0.9;
   if (isSubtle) {
-    scale *= 0.65; // Redução de ~35% para conectivos estruturais
+    scale *= 0.81; // Ajustado para representar exatamente 65% do tamanho de uma palavra normal
   }
   sprite.scale.set(3.0 * scale, 0.563 * scale, 1);
   return { sprite, scale, baseColor };
@@ -293,7 +293,7 @@ function applyGraph(graphData) {
       }
       let scale = 0.85 + (n.weight || 0.5) * 0.9;
       if (isSubtle) {
-        scale *= 0.65;
+        scale *= 0.81;
       }
       obj.baseScale = scale;
       obj.sprite.scale.set(3.0 * scale, 0.563 * scale, 1);
@@ -445,7 +445,7 @@ function frame(time = 0) {
       isTrajectoryFinale = (trajectoryStep >= M - 1);
 
       const elapsed = performance.now() - trajectoryStepStartTime;
-      stepProgress = Math.min(1.0, Math.max(0.0, elapsed / 420));
+      stepProgress = Math.min(1.0, Math.max(0.0, elapsed / 650));
 
       if (!isTrajectoryFinale) {
         const k = trajectoryStep;
@@ -500,19 +500,19 @@ function frame(time = 0) {
         targetOpacity = (idx !== -1) ? 1.0 : 0.08;
         if (idx !== -1) {
           targetColor = TRACE_GOLD;
-          currentScale = o.baseScale * (1.18 + 0.06 * Math.sin(time * 0.01));
+          currentScale = o.baseScale * (1.12 + 0.04 * Math.sin(time * 0.008));
         }
       } else if (idx !== -1) {
         if (o.data.id === touchedWordId) {
-          // Palavra tocada no instante: destaque dourado brilhante + pulso ampliado
+          // Palavra tocada no instante: destaque dourado brilhante + pulso suave
           targetOpacity = 1.0;
           targetColor = TRACE_GOLD;
-          currentScale = o.baseScale * (1.35 + 0.10 * Math.sin(time * 0.025));
+          currentScale = o.baseScale * (1.20 + 0.05 * Math.sin(time * 0.012));
         } else if (idx <= trajectoryStep) {
           // Palavra já consolidada no rastro histórico: nítida e tamanho estável
           targetOpacity = 1.0;
           targetColor = o.baseColor;
-          currentScale = o.baseScale * 1.10;
+          currentScale = o.baseScale * 1.08;
         } else {
           // Palavra ainda não alcançada na trajetória
           targetOpacity = 0.08;
@@ -586,14 +586,14 @@ function frame(time = 0) {
         : `${edge.userData.target}|${edge.userData.source}`;
 
       if (isTrajectoryFinale) {
-        // Clímax final: todas as conexões da resposta acendem simultaneamente em dourado
+        // Clímax final: conexões da resposta mantêm a cor temática do seu agrupamento com nitidez (sem poluição dourada)
         pos.setXYZ(0, a.x, a.y, a.z);
         pos.setXYZ(1, b.x, b.y, b.z);
         pos.needsUpdate = true;
 
         if (allReplyEdgeKeys.has(pairKey)) {
-          edge.material.color.copy(TRACE_GOLD);
-          edge.material.opacity = 0.88;
+          edge.material.color.copy(edge.userData.baseColor);
+          edge.material.opacity = 0.65;
         } else {
           edge.material.color.copy(edge.userData.baseColor);
           edge.material.opacity += (0.02 - edge.material.opacity) * 0.15;
@@ -832,12 +832,12 @@ function startTrajectory() {
     if (!activeWords.length) return;
     trajectoryStep++;
     trajectoryStepStartTime = performance.now();
-    // Permanece com a constelação completa acesa por ~1.7s (4 passos de 420ms) antes de reiniciar suavemente
+    // Permanece com a constelação completa acesa por ~2.6s (4 passos de 650ms) antes de reiniciar suavemente
     if (trajectoryStep >= activeWords.length + 3) {
       trajectoryStep = 0;
       trajectoryStepStartTime = performance.now();
     }
-  }, 420);
+  }, 650);
 }
 
 function stopTrajectory() {
@@ -884,6 +884,74 @@ if (btnConnectives) {
     }
   };
 }
+
+// Controle do Modo Tela Cheia na Nuvem 3D
+const universeSection = document.querySelector('.universe');
+const btnFullscreen = $('fullscreen-btn');
+const btnFullscreenClose = $('fullscreen-close-btn');
+
+function updateFullscreenUI() {
+  const isFS = !!document.fullscreenElement || (universeSection && universeSection.classList.contains('is-fullscreen'));
+  if (btnFullscreen) {
+    btnFullscreen.setAttribute('aria-pressed', String(isFS));
+    btnFullscreen.classList.toggle('active', isFS);
+    btnFullscreen.textContent = isFS ? '✕ Sair' : '⛶ Tela cheia';
+  }
+  if (btnFullscreenClose) {
+    btnFullscreenClose.hidden = !isFS;
+  }
+  setTimeout(() => {
+    if (!stage || !renderer) return;
+    const w = stage.clientWidth;
+    const h = stage.clientHeight;
+    if (w && h) {
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+  }, 60);
+}
+
+function toggleFullscreen() {
+  if (!universeSection) return;
+  const isFS = !!document.fullscreenElement || universeSection.classList.contains('is-fullscreen');
+  if (!isFS) {
+    if (universeSection.requestFullscreen) {
+      universeSection.requestFullscreen().catch(() => {
+        universeSection.classList.add('is-fullscreen');
+        updateFullscreenUI();
+      });
+    } else {
+      universeSection.classList.add('is-fullscreen');
+      updateFullscreenUI();
+    }
+  } else {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {
+        universeSection.classList.remove('is-fullscreen');
+        updateFullscreenUI();
+      });
+    } else {
+      universeSection.classList.remove('is-fullscreen');
+      updateFullscreenUI();
+    }
+  }
+}
+
+if (btnFullscreen) {
+  btnFullscreen.onclick = toggleFullscreen;
+}
+if (btnFullscreenClose) {
+  btnFullscreenClose.onclick = toggleFullscreen;
+}
+document.addEventListener('fullscreenchange', updateFullscreenUI);
+document.addEventListener('webkitfullscreenchange', updateFullscreenUI);
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && universeSection && universeSection.classList.contains('is-fullscreen')) {
+    universeSection.classList.remove('is-fullscreen');
+    updateFullscreenUI();
+  }
+});
 
 // Tooltip de explicação da proporção e latência (sem ícone)
 const tooltipBtn = $('balance-tooltip-btn');

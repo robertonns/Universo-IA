@@ -435,6 +435,60 @@ textarea::placeholder {
   background: radial-gradient(ellipse at 50% 60%, #142b35 0, #0b1521 45%, #0a101a 80%);
 }
 
+.universe:fullscreen,
+.universe:-webkit-full-screen,
+.universe.is-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  border: none !important;
+  z-index: 999999 !important;
+}
+
+.universe:fullscreen #stage,
+.universe:-webkit-full-screen #stage,
+.universe.is-fullscreen #stage {
+  height: 100vh !important;
+  width: 100vw !important;
+}
+
+.fullscreen-close-btn {
+  position: absolute;
+  top: 62px;
+  right: 20px;
+  z-index: 10;
+  background: rgba(220, 38, 38, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.7);
+  color: #fecaca;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.fullscreen-close-btn:hover {
+  background: rgba(239, 68, 68, 0.6);
+  border-color: #ef4444;
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.5);
+}
+
+.fullscreen-close-btn[hidden] {
+  display: none !important;
+}
+
 .scene-head {
   position: absolute;
   z-index: 2;
