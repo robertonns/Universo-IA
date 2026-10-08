@@ -363,8 +363,15 @@ function applyGraph(graphData) {
   $('nodes').textContent = `${nodesCount} / ${edgesCount}`;
   $('scene-empty').hidden = nodesCount > 0;
 
-  // 6. Legenda interativa com foco de dimensão por clique (exclui conectivos)
-  const groups = (Array.isArray(graphData.groups) ? graphData.groups : []).filter(g => g !== 'conectivos');
+  // 6. Legenda interativa com foco de dimensão por clique (exclui conectivos e fixa conceito/cognição no final dos grupos estáveis)
+  let rawGroups = (Array.isArray(graphData.groups) ? graphData.groups : []).filter(g => g !== 'conectivos');
+  const hasCognicao = rawGroups.includes('conceito/cognição');
+  const standardGroups = rawGroups.filter(g => !g.startsWith('tema:') && !g.startsWith('ação:') && !g.startsWith('qualidade:') && !g.startsWith('conceito:') && g !== 'conceito/cognição');
+  const dynamicGroups = rawGroups.filter(g => g.startsWith('tema:') || g.startsWith('ação:') || g.startsWith('qualidade:') || g.startsWith('conceito:'));
+  const groups = hasCognicao
+    ? [...standardGroups, 'conceito/cognição', ...dynamicGroups]
+    : [...standardGroups, ...dynamicGroups];
+
   $('legend').replaceChildren(...groups.map(g => {
     const s = document.createElement('span');
     s.textContent = g;
@@ -709,6 +716,17 @@ stage.addEventListener('pointerup', e => {
   focus = found[0]?.object.userData.id || null;
   $('inspector').hidden = !focus;
 
+  // Ao clicar no palco 3D (seja em espaço vazio ou em uma palavra), cancela agrupamento selecionado na legenda
+  if (activeDimension) {
+    activeDimension = null;
+    const legendElem = $('legend');
+    if (legendElem) {
+      for (const chip of legendElem.children) {
+        chip.classList.remove('active');
+      }
+    }
+  }
+
   if (focus && nodes.has(focus)) {
     const n = nodes.get(focus).data;
     const weightVal = typeof n.weight === 'number' ? n.weight.toFixed(2) : n.weight;
@@ -888,17 +906,15 @@ if (btnConnectives) {
 // Controle do Modo Tela Cheia na Nuvem 3D
 const universeSection = document.querySelector('.universe');
 const btnFullscreen = $('fullscreen-btn');
-const btnFullscreenClose = $('fullscreen-close-btn');
+let savedScrollY = 0;
 
 function updateFullscreenUI() {
   const isFS = !!document.fullscreenElement || (universeSection && universeSection.classList.contains('is-fullscreen'));
   if (btnFullscreen) {
     btnFullscreen.setAttribute('aria-pressed', String(isFS));
     btnFullscreen.classList.toggle('active', isFS);
-    btnFullscreen.textContent = isFS ? '✕ Sair' : '⛶ Tela cheia';
-  }
-  if (btnFullscreenClose) {
-    btnFullscreenClose.hidden = !isFS;
+    btnFullscreen.textContent = isFS ? '✕ Fechar' : '⛶ Tela cheia';
+    btnFullscreen.title = isFS ? 'Fechar tela cheia (Esc)' : 'Alterna o modo de tela cheia para o universo 3D';
   }
   setTimeout(() => {
     if (!stage || !renderer) return;
@@ -912,10 +928,19 @@ function updateFullscreenUI() {
   }, 60);
 }
 
+function restoreScrollPosition() {
+  if (typeof savedScrollY === 'number') {
+    setTimeout(() => {
+      window.scrollTo({ top: savedScrollY, behavior: 'instant' });
+    }, 40);
+  }
+}
+
 function toggleFullscreen() {
   if (!universeSection) return;
   const isFS = !!document.fullscreenElement || universeSection.classList.contains('is-fullscreen');
   if (!isFS) {
+    savedScrollY = window.scrollY || window.pageYOffset || 0;
     if (universeSection.requestFullscreen) {
       universeSection.requestFullscreen().catch(() => {
         universeSection.classList.add('is-fullscreen');
@@ -926,14 +951,16 @@ function toggleFullscreen() {
       updateFullscreenUI();
     }
   } else {
-    if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {
-        universeSection.classList.remove('is-fullscreen');
-        updateFullscreenUI();
-      });
-    } else {
+    const exitDone = () => {
       universeSection.classList.remove('is-fullscreen');
       updateFullscreenUI();
+      restoreScrollPosition();
+    };
+
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().then(exitDone).catch(exitDone);
+    } else {
+      exitDone();
     }
   }
 }
@@ -941,15 +968,25 @@ function toggleFullscreen() {
 if (btnFullscreen) {
   btnFullscreen.onclick = toggleFullscreen;
 }
-if (btnFullscreenClose) {
-  btnFullscreenClose.onclick = toggleFullscreen;
-}
-document.addEventListener('fullscreenchange', updateFullscreenUI);
-document.addEventListener('webkitfullscreenchange', updateFullscreenUI);
+document.addEventListener('fullscreenchange', () => {
+  const isFS = !!document.fullscreenElement;
+  if (!isFS) {
+    restoreScrollPosition();
+  }
+  updateFullscreenUI();
+});
+document.addEventListener('webkitfullscreenchange', () => {
+  const isFS = !!document.fullscreenElement;
+  if (!isFS) {
+    restoreScrollPosition();
+  }
+  updateFullscreenUI();
+});
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && universeSection && universeSection.classList.contains('is-fullscreen')) {
     universeSection.classList.remove('is-fullscreen');
     updateFullscreenUI();
+    restoreScrollPosition();
   }
 });
 
@@ -1166,6 +1203,33 @@ function candidates(items) {
   updateCandidatesPanel(items);
 }
 
+function deselectStepCandidate() {
+  if (currentSelectedStep === null) return;
+  currentSelectedStep = null;
+  const spans = $('answer')?.querySelectorAll('.interactive-token');
+  if (spans) {
+    spans.forEach(s => s.classList.remove('active'));
+  }
+  if (lastStepCandidates && lastStepCandidates.length) {
+    const defaultStep = (lastStepCandidates[lastStepCandidates.length - 1].is_tail && lastStepCandidates.length >= 2)
+      ? lastStepCandidates[lastStepCandidates.length - 2]
+      : lastStepCandidates[lastStepCandidates.length - 1];
+    updateCandidatesPanel(defaultStep.candidates || []);
+  }
+  const ebDir = $('eyebrow-direct');
+  const ebInd = $('eyebrow-indirect');
+  if (ebDir) ebDir.textContent = 'PRÓXIMOS TOKENS — DIRETOS';
+  if (ebInd) ebInd.textContent = 'PRÓXIMOS TOKENS — INDIRETOS';
+}
+
+if ($('answer')) {
+  $('answer').addEventListener('click', (e) => {
+    if (!e.target.closest('.interactive-token')) {
+      deselectStepCandidate();
+    }
+  });
+}
+
 // Renderiza a resposta com tokens interativos clicáveis para inspeção passo a passo (Modo Investigativo)
 function renderInteractiveAnswer(text, stepCandidates) {
   const answerElem = $('answer');
@@ -1187,6 +1251,9 @@ function renderInteractiveAnswer(text, stepCandidates) {
   answerElem.replaceChildren();
 
   lastStepCandidates.forEach((stepItem, idx) => {
+    // Ignora tokens técnicos de continuidade futura invisíveis (is_tail)
+    if (stepItem.is_tail) return;
+
     const span = document.createElement('span');
     span.className = 'interactive-token';
     span.textContent = stepItem.token || '';
@@ -1211,14 +1278,7 @@ function selectStepCandidate(idx) {
   const ebInd = $('eyebrow-indirect');
 
   if (currentSelectedStep === idx) {
-    // Ao clicar novamente no mesmo token, desseleciona e restaura o último passo
-    currentSelectedStep = null;
-    spans.forEach(s => s.classList.remove('active'));
-    if (lastStepCandidates.length) {
-      updateCandidatesPanel(lastStepCandidates[lastStepCandidates.length - 1].candidates || []);
-    }
-    if (ebDir) ebDir.textContent = 'PRÓXIMOS TOKENS — DIRETOS';
-    if (ebInd) ebInd.textContent = 'PRÓXIMOS TOKENS — INDIRETOS';
+    deselectStepCandidate();
     return;
   }
 
@@ -1232,16 +1292,28 @@ function selectStepCandidate(idx) {
   const nextStepIdx = idx + 1;
   const targetStepItem = (nextStepIdx < lastStepCandidates.length)
     ? lastStepCandidates[nextStepIdx]
-    : lastStepCandidates[idx];
+    : null;
 
-  if (ebDir) {
-    ebDir.textContent = clickedToken ? `PRÓXIMOS TOKENS APÓS "${clickedToken}" — DIRETOS` : 'PRÓXIMOS TOKENS — DIRETOS';
+  if (targetStepItem && targetStepItem.candidates && targetStepItem.candidates.length) {
+    if (ebDir) {
+      ebDir.textContent = clickedToken ? `PRÓXIMOS TOKENS APÓS "${clickedToken}" — DIRETOS` : 'PRÓXIMOS TOKENS — DIRETOS';
+    }
+    if (ebInd) {
+      ebInd.textContent = clickedToken ? `PRÓXIMOS TOKENS APÓS "${clickedToken}" — INDIRETOS` : 'PRÓXIMOS TOKENS — INDIRETOS';
+    }
+    updateCandidatesPanel(targetStepItem.candidates);
+  } else {
+    if (ebDir) {
+      ebDir.textContent = clickedToken ? `PRÓXIMOS TOKENS APÓS "${clickedToken}" — RESPOSTA CONCLUÍDA PELA IA` : 'RESPOSTA CONCLUÍDA PELA IA';
+    }
+    if (ebInd) {
+      ebInd.textContent = clickedToken ? `PRÓXIMOS TOKENS APÓS "${clickedToken}" — RESPOSTA CONCLUÍDA PELA IA` : 'RESPOSTA CONCLUÍDA PELA IA';
+    }
+    $('candidates-direct').innerHTML = '<div class="candidate-empty">A IA concluiu o raciocínio naturalmente neste ponto.</div>';
+    $('candidates-indirect').innerHTML = '<div class="candidate-empty">A IA concluiu o raciocínio naturalmente neste ponto.</div>';
+    $('mass-direct').textContent = '—';
+    $('mass-indirect').textContent = '—';
   }
-  if (ebInd) {
-    ebInd.textContent = clickedToken ? `PRÓXIMOS TOKENS APÓS "${clickedToken}" — INDIRETOS` : 'PRÓXIMOS TOKENS — INDIRETOS';
-  }
-
-  updateCandidatesPanel(targetStepItem?.candidates || []);
 }
 
 // Requisições HTTP e SSE Streaming
@@ -1307,7 +1379,6 @@ async function submit(text = $('prompt').value) {
     const ebInd = $('eyebrow-indirect');
     if (ebInd) ebInd.textContent = 'PRÓXIMOS TOKENS — INDIRETOS';
     $('generation-state').textContent = 'Aguardando contexto';
-    $('answer-version').textContent = '—';
     $('words').textContent = '0';
     const promptTokElem = $('tokens-prompt') || $('tokens');
     if (promptTokElem) promptTokElem.textContent = '—';
@@ -1320,7 +1391,6 @@ async function submit(text = $('prompt').value) {
   }
 
   $('generation-state').textContent = 'Atualizando mapa…';
-  $('answer-version').textContent = `v${requestVersion} · preparando`;
 
   // 1. Atualização lexical rápida do mapa 3D
   try {
@@ -1417,8 +1487,7 @@ async function submit(text = $('prompt').value) {
             : null;
 
           renderInteractiveAnswer(result.answer, result.step_candidates);
-          $('answer-version').textContent = `v${requestVersion} · atual`;
-          $('generation-state').textContent = 'Prévia concluída · continue escrevendo';
+          $('generation-state').textContent = 'Prévia concluída';
           $('token-capacity').textContent = `Concluída · ${outTokens} de ${currentReplyTokens} tokens utilizados`;
 
           const promptTokElem = $('tokens-prompt') || $('tokens');

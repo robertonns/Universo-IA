@@ -213,9 +213,10 @@ class ProtocolTests(unittest.TestCase):
                 self.assertEqual(done_data['text_tokens'], 20)
                 self.assertIsNotNone(done_data['words_s'])
 
-                # Validação do payload repassado ao llama.cpp
+                # Validação do payload repassado ao llama.cpp (limite da balança + 1 token invisível)
                 self.assertEqual(len(captured_payloads), 1)
-                self.assertEqual(captured_payloads[0]['max_tokens'], 60)
+                self.assertEqual(captured_payloads[0]['max_tokens'], 61)
+                self.assertEqual(done_data['max_tokens_config'], 60)
 
     def test_connectives_in_graph(self):
         """Valida que conectivos não são descartados e recebem atributos visuais adequados."""
@@ -451,6 +452,24 @@ class ProtocolTests(unittest.TestCase):
         # Nenhuma âncora estática 'vocabulário demonstrativo' deve estar presente
         demonstrative_nodes = [n for n in res['nodes'] if n.get('origin') == 'vocabulário demonstrativo']
         self.assertEqual(len(demonstrative_nodes), 0, "Âncoras estáticas demonstrativas devem estar inativas")
+
+    def test_mane_reconstruction_and_legend_sorting_and_demo_edges(self):
+        """Valida que o radical 'mane' é reconstruído para 'maneira', 'conceito/cognição' fica no final da legenda e modo demo preserva arestas."""
+        # 1. Reconstrução de 'mane'
+        self.assertEqual(server.reconstruct_candidate_word('mane'), 'maneira')
+        self.assertEqual(server.reconstruct_candidate_word('torn'), 'tornar')
+
+        # 2. Ordenação da legenda: conceito/cognição deve ficar no final dos grupos estáveis
+        res = server.graph('inteligência artificial tecnologia brasil capital', 'o modelo pensa sobre a mente e dados')
+        groups = res['groups']
+        if 'conceito/cognição' in groups:
+            standard_without_dyn = [g for g in groups if not any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:'))]
+            self.assertEqual(standard_without_dyn[-1], 'conceito/cognição', "conceito/cognição deve ser o último dos grupos estáveis")
+
+        # 3. Modo demonstração preserva arestas de grupo lexical
+        demo_graph = server.graph('inteligência tecnologia', 'computador modelo software algoritmo', is_demo=True)
+        lexical_edges = [e for e in demo_graph['edges'] if e.get('kind') == 'grupo lexical']
+        self.assertGreater(len(lexical_edges), 0, "Modo demonstração deve manter conexões temáticas entre termos da resposta")
 
 
 if __name__ == '__main__':

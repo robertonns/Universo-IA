@@ -77,33 +77,38 @@
           <span id="graph-version">Aguardando texto</span>
         </div>
         <div class="scene-controls">
-          <button id="toggle-connectives" class="trace-btn" type="button" aria-pressed="false" title="Alterna a exibição das palavras de conexão estrutural">Conectivos</button>
-          <button id="highlight-trace" class="trace-btn" type="button" aria-pressed="false" title="Destaca a linha de pensamento e a sequência da resposta">Linha da Resposta</button>
-          <button id="trajectory-btn" class="trace-btn" type="button" aria-pressed="false" title="Exibe o rastro passo a passo da formação do pensamento da IA">Trajetória</button>
+          <div class="btn-tooltip-wrap">
+            <button id="toggle-connectives" class="trace-btn" type="button" aria-pressed="false">Conectivos</button>
+            <div class="custom-tooltip">Alterna a exibição das palavras de conexão estrutural (artigos, preposições e conjunções).</div>
+          </div>
+          <div class="btn-tooltip-wrap">
+            <button id="highlight-trace" class="trace-btn" type="button" aria-pressed="false">Linha da Resposta</button>
+            <div class="custom-tooltip">Destaca a sequência contínua de palavras geradas na resposta do modelo.</div>
+          </div>
+          <div class="btn-tooltip-wrap">
+            <button id="trajectory-btn" class="trace-btn" type="button" aria-pressed="false">Trajetória</button>
+            <div class="custom-tooltip">Exibe o rastro passo a passo da formação do pensamento da IA.</div>
+          </div>
           <button id="pause" aria-pressed="false">Pausar movimento</button>
           <button id="reset">Recentralizar</button>
           <button id="fullscreen-btn" class="trace-btn" type="button" aria-pressed="false" title="Alterna o modo de tela cheia para o universo 3D">⛶ Tela cheia</button>
         </div>
       </div>
       
-      <button id="fullscreen-close-btn" class="fullscreen-close-btn" type="button" title="Fechar tela cheia (Esc)" hidden>✕ Fechar tela cheia</button>
       <div id="stage" tabindex="0" aria-label="Mapa 3D: arraste para girar; use a roda para aproximar. Setas giram; teclas mais e menos ajustam o zoom."></div>
       <div class="scene-empty" id="scene-empty">O universo começa com a sua primeira palavra.</div>
       
       <div class="scene-footer">
         <div id="legend"></div>
-        <span>Arraste para orbitar · role para aproximar · clique para inspecionar</span>
+        <span class="scene-hint">Arraste para orbitar · role para aproximar · clique para inspecionar</span>
       </div>
       <div id="inspector" hidden></div>
     </section>
-
-    <p class="map-note">Associações lexicais · posições ilustrativas · sem embeddings</p>
 
     <section class="below">
       <article class="response-panel">
         <div class="panel-title">
           <span class="eyebrow">RESPOSTA EM CONSTRUÇÃO</span>
-          <span id="answer-version">—</span>
         </div>
         <div id="notice" role="status">O modelo local será iniciado automaticamente ao abrir o aplicativo.</div>
         <p id="answer">Sua resposta aparecerá aqui e será reformulada enquanto você escreve.</p>
@@ -138,34 +143,53 @@
     
     <p class="token-note">Classificação didática dos candidatos visíveis. Os dois quadros somam 100% da lista exibida.</p>
 
+    <div class="indicators-header">
+      <span class="eyebrow">INDICADORES:</span>
+    </div>
+
     <section class="metrics" aria-label="Relatório técnico">
-      <div>
-        <span>Palavras na entrada</span>
+      <div class="metric-item">
+        <span class="metric-label">
+          Palavras na Entrada
+          <span class="custom-tooltip">Quantidade de palavras únicas identificadas na pergunta digitada.</span>
+        </span>
         <strong id="words">0</strong>
       </div>
-      <div>
-        <span>Nós / conexões</span>
+      <div class="metric-item">
+        <span class="metric-label">
+          Nós / Conexões
+          <span class="custom-tooltip">Nós (palavras) e arestas (relações semânticas e sequenciais) desenhadas na nuvem 3D.</span>
+        </span>
         <strong id="nodes">0 / 0</strong>
       </div>
-      <div>
-        <span><abbr title="Tokens medidos na entrada da pergunta">Tokens da pergunta</abbr></span>
+      <div class="metric-item">
+        <span class="metric-label">
+          Tokens da Pergunta
+          <span class="custom-tooltip">Tokens medidos pelo vocabulário oficial do modelo para a sua pergunta.</span>
+        </span>
         <strong id="tokens-prompt">—</strong>
       </div>
-      <div>
-        <span><abbr title="Tokens gerados na resposta do modelo">Tokens da resposta</abbr></span>
+      <div class="metric-item">
+        <span class="metric-label">
+          Tokens da Resposta
+          <span class="custom-tooltip">Total de tokens gerados pela IA na resposta atual (limitado pela balança).</span>
+        </span>
         <strong id="tokens-reply">—</strong>
       </div>
-      <div>
-        <span>Velocidade da resposta</span>
+      <div class="metric-item">
+        <span class="metric-label">
+          Velocidade da Resposta
+          <span class="custom-tooltip">Ritmo de geração medido na CPU em palavras por segundo e tokens/s.</span>
+        </span>
         <strong id="speed">—</strong>
       </div>
     </section>
 
     <details class="guide">
-      <summary>Como interpretar os dados e testar o desempenho</summary>
+      <summary>Dúvidas / Definições / Conceitos / Dicas: Veja como interpretar os dados e testar o desempenho.</summary>
       <div class="details-grid">
         <article class="info-card">
-          <h2>🌐 Nuvem 3D</h2>
+          <h2><span class="card-bullet">◇</span> Nuvem 3D</h2>
           <p><b>O que a nuvem de palavras mostra:</b></p>
           <ul>
             <li><b>Tamanho:</b> quanto maior a palavra, mais peso ou frequência ela possui no contexto.</li>
@@ -175,7 +199,7 @@
         </article>
 
         <article class="info-card">
-          <h2>⚖️ Balança de Tokens</h2>
+          <h2><span class="card-bullet">◇</span> Balança de Tokens</h2>
           <p>Permite dosar a divisão dos ~1.900 tokens úteis do contexto entre a pergunta e a resposta.</p>
           <ul>
             <li><b>Pergunta detalhada:</b> ideal para colar textos longos; a resposta é objetiva para manter baixo tempo de espera na CPU.</li>
@@ -184,12 +208,12 @@
         </article>
 
         <article class="info-card">
-          <h2>📊 Próxima palavra provável</h2>
+          <h2><span class="card-bullet">◇</span> Próxima palavra provável</h2>
           <p>Mostra as alternativas que o modelo considerou na última posição gerada da resposta. Os quadros "diretos" e "indiretos" são uma divisão didática por função gramatical, somando 100% da amostra visualizada.</p>
         </article>
 
         <article class="info-card">
-          <h2>ℹ️ Dados da sessão</h2>
+          <h2><span class="card-bullet">◇</span> Dados da sessão</h2>
           <ul>
             <li><b>Tokens da entrada:</b> contagem medida diretamente no tokenizer do modelo.</li>
             <li><b>Modelo de execução:</b> Qwen2.5-0.5B-Instruct (~500 milhões de parâmetros em quantização Q4_K_M).</li>
@@ -198,7 +222,7 @@
         </article>
 
         <article class="info-card">
-          <h2>🎯 Coesão e Precisão do Modelo (Temperatura)</h2>
+          <h2><span class="card-bullet">◇</span> Coesão e Precisão do Modelo (Temperatura)</h2>
           <p><b>Por que utilizamos decodificação determinística (temperatura zero):</b></p>
           <ul>
             <li><b>Fidelidade aos Próximos Tokens:</b> o token gerado na resposta coincide 100% com a alternativa mais votada (1º lugar) na lista de probabilidades.</li>
@@ -208,7 +232,7 @@
         </article>
 
         <article class="info-card">
-          <h2>⚡ Como testar o desempenho e exportar</h2>
+          <h2><span class="card-bullet">◇</span> Como testar o desempenho e exportar</h2>
           <ol>
             <li>Selecione um exemplo ou digite um tema de seu interesse.</li>
             <li>Acompanhe a emissão dos tokens e a métrica de palavras/segundo.</li>
@@ -220,11 +244,11 @@
     </details>
 
     <footer>
-      <span>UNIVERSO IA - LLM / protótipo v0.1 (idealizado por Roberto Nunes)</span>
+      <span>UNIVERSO IA - LLM | v0.5.2 (idealizado por Roberto Nunes)</span>
       <span>Processamento local em loopback. Seus textos não saem deste dispositivo.</span>
     </footer>
   </main>
 
-  <script type="module" src="/app.js?v=0.5.2"></script>
+  <script type="module" src="/app.js?v=0.5.3"></script>
 </body>
 </html>

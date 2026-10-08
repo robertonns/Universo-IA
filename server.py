@@ -213,12 +213,13 @@ INTERMEDIATE_HYPERNYMS = {
         'movimento', 'transformação', 'criação', 'produção', 'operação', 'transmissão', 'pesquisa',
         'exercício', 'competição', 'partida', 'treino', 'corrida', 'jogo',
         'precisa', 'precisar', 'gerencia', 'gerenciar', 'utiliza', 'utilizar', 'opera', 'operar',
-        'interpreta', 'interpretar', 'executa', 'executar', 'construir', 'manipular'
+        'interpreta', 'interpretar', 'executa', 'executar', 'construir', 'manipular', 'tornar', 'aplicar', 'gerar'
     },
     'propriedade/estado': {
         'complexidade', 'capacidade', 'potencial', 'qualidade', 'dimensão', 'velocidade', 'tamanho',
-        'estrutura', 'forma', 'padrão', 'estabilidade', 'condição', 'localizada', 'central', 'maior',
-        'vitalidade', 'bem-estar', 'legal', 'jurídico', 'essencial', 'sensorial'
+        'estrutura', 'forma', 'formas', 'modo', 'modos', 'maneira', 'maneiras', 'padrão', 'estabilidade',
+        'condição', 'localizada', 'central', 'maior', 'vitalidade', 'bem-estar', 'legal', 'jurídico',
+        'essencial', 'sensorial'
     },
     'conceito/cognição': {
         'mente', 'cérebro', 'pensamento', 'consciência', 'memória', 'neurônio', 'cognição', 'ideia',
@@ -291,7 +292,27 @@ STEM_RECONSTRUCTION = {
     'signif': 'significado',
     'ling': 'linguagem',
     'mod': 'modelo',
-    'proc': 'processo'
+    'proc': 'processo',
+    'mane': 'maneira',
+    'maneir': 'maneira',
+    'maneiras': 'maneira',
+    'torn': 'tornar',
+    'princ': 'principal',
+    'pos': 'possível',
+    'espec': 'específico',
+    'fundament': 'fundamental',
+    'difer': 'diferente',
+    'comun': 'comunicação',
+    'repres': 'representação',
+    'caract': 'característica',
+    'exemp': 'exemplo',
+    'necess': 'necessário',
+    'apli': 'aplicação',
+    'autom': 'automático',
+    'ger': 'geração',
+    'util': 'utilização',
+    'capac': 'capacidade',
+    'estrat': 'estratégia'
 }
 
 
@@ -405,7 +426,7 @@ def normalize_dynamic_group(word: str) -> str:
     return f'conceito: {w}'
 
 
-def graph(text: str, answer: str = '', step_candidates: list = None):
+def graph(text: str, answer: str = '', step_candidates: list = None, is_demo: bool = False):
     """
     Heurística lexical e probabilística para alimentar a cena Three.js.
     Destaca termos do texto de entrada, resposta formulada e alternativas concorrentes
@@ -560,9 +581,10 @@ def graph(text: str, answer: str = '', step_candidates: list = None):
             continue
         peers = [n for n in nodes[:i] if n['group'] == node['group']][-4:]
         for peer in peers:
-            # Evita criar arestas lexicais secundárias entre termos que já pertencem à mesma resposta formulada,
-            # mantendo o traçado da resposta estritamente linear e sem triângulos redundantes
-            if (peer['id'] in reply) and (node['id'] in reply):
+            # Evita criar arestas lexicais secundárias entre termos da mesma resposta linear no modo real.
+            # No modo demonstração, preserva as conexões temáticas entre termos da resposta para que
+            # o clique no grupo ilumine tanto as palavras quanto suas arestas.
+            if not is_demo and (peer['id'] in reply) and (node['id'] in reply):
                 continue
             add_edge(peer['id'], node['id'], 0.5, 'grupo lexical')
 
@@ -589,18 +611,22 @@ def graph(text: str, answer: str = '', step_candidates: list = None):
             add_edge(a, b, 0.88, 'sequência na resposta', is_shortcut=True)
 
     # Ordenação da legenda: grupos semânticos estáveis no meio,
+    # 'conceito/cognição' fixado sempre ao final dos grupos estáveis,
     # e grupos dinâmicos ('conceito:', 'ação:', 'qualidade:', 'tema:') obrigatoriamente por último (à direita).
     # Conectivos são excluídos da legenda (possuem controle exclusivo no botão dedicado).
     all_groups = list(dict.fromkeys(n['group'] for n in nodes))
     standard_groups = [
         g for g in all_groups
-        if not any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:')) and g != 'conectivos'
+        if not any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:'))
+        and g != 'conectivos'
+        and g != 'conceito/cognição'
     ]
+    cognicao_group = ['conceito/cognição'] if 'conceito/cognição' in all_groups else []
     dynamic_groups = [
         g for g in all_groups
         if any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:'))
     ]
-    sorted_groups = standard_groups + dynamic_groups
+    sorted_groups = standard_groups + cognicao_group + dynamic_groups
 
     return dict(
         nodes=nodes,
@@ -701,12 +727,20 @@ async def api_generate(data: dict):
                 yield event('chunk', text=fragment, candidates=cands, step_index=d_idx)
                 await asyncio.sleep(0.025)
 
+            # Token + 1 didático para o modo demonstração: permite investigar alternativas após a última palavra
+            demo_tail_cands = [
+                dict(token=' continuamente', probability=0.72),
+                dict(token=' através', probability=0.18),
+                dict(token=' para', probability=0.10)
+            ]
+            demo_history.append(dict(token='', step=len(demo_history), candidates=demo_tail_cands, is_tail=True))
+
             elapsed = max(0.01, time.perf_counter() - started)
             yield event(
                 'done',
                 answer=answer,
-                graph=graph(text, answer, step_candidates=demo_history),
-                candidates=demo_history[-1]['candidates'] if demo_history else [],
+                graph=graph(text, answer, step_candidates=demo_history, is_demo=True),
+                candidates=demo_history[-2]['candidates'] if len(demo_history) >= 2 else [],
                 step_candidates=demo_history,
                 max_tokens_config=max_tokens,
                 ttft_ms=None,
@@ -773,12 +807,13 @@ async def api_generate(data: dict):
                 )
                 return
 
-            # Limite de tokens de saída dinâmico configurado pela balança
+            # Limite de tokens de saída dinâmico configurado pela balança (+1 token invisível para captura de candidatos futuros)
+            max_tokens_requested = max_tokens + 1
             payload = dict(
                 model='local',
                 messages=messages,
                 stream=True,
-                max_tokens=max_tokens,
+                max_tokens=max_tokens_requested,
                 temperature=0.0,
                 top_p=1.0,
                 top_k=0,
@@ -806,8 +841,24 @@ async def api_generate(data: dict):
                         fragment = choice.get('delta', {}).get('content') or ''
                         logs = (choice.get('logprobs') or {}).get('content') or []
                         if logs:
-                            output_tokens += len(logs)
                             latest_candidates = readable_candidates(logs[-1].get('top_logprobs', []))
+
+                        # Se já atingimos o limite visível da resposta (max_tokens):
+                        # Este é o (max_tokens + 1)-ésimo token gerado pelo modelo!
+                        # Não emitimos chunk de texto, não adicionamos à resposta nem à nuvem 3D.
+                        # Apenas salvamos suas probabilidades como a continuação investigativa da última palavra visível.
+                        if len(step_history) >= max_tokens:
+                            if latest_candidates:
+                                step_history.append(dict(
+                                    token='',
+                                    step=len(step_history),
+                                    candidates=latest_candidates,
+                                    is_tail=True
+                                ))
+                            break
+
+                        if logs:
+                            output_tokens += len(logs)
                             if fragment:
                                 step_history.append(dict(
                                     token=fragment,
@@ -815,6 +866,7 @@ async def api_generate(data: dict):
                                     candidates=latest_candidates
                                 ))
                         elif fragment:
+                            output_tokens += 1
                             step_history.append(dict(
                                 token=fragment,
                                 step=len(step_history),
@@ -836,13 +888,13 @@ async def api_generate(data: dict):
             yield event(
                 'done',
                 answer=answer,
-                graph=graph(text, answer, step_candidates=step_history),
-                candidates=latest_candidates,
+                graph=graph(text, answer, step_candidates=step_history, is_demo=False),
+                candidates=step_history[-2]['candidates'] if (step_history and step_history[-1].get('is_tail') and len(step_history) >= 2) else (step_history[-1]['candidates'] if step_history else []),
                 step_candidates=step_history,
                 max_tokens_config=max_tokens,
                 ttft_ms=ttft_ms,
                 text_tokens=prompt_count or len(words(text)),
-                output_tokens=output_tokens,
+                output_tokens=min(output_tokens, max_tokens),
                 words_s=round(len(words(answer)) / elapsed, 1) if answer else None
             )
 
