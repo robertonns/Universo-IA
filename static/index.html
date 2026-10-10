@@ -76,22 +76,25 @@
           <span class="eyebrow">NAVEGUE DENTRO DA IA</span>
           <span id="graph-version">Aguardando texto</span>
         </div>
-        <div class="scene-controls">
-          <div class="btn-tooltip-wrap">
-            <button id="toggle-connectives" class="trace-btn" type="button" aria-pressed="false">Conectivos</button>
-            <div class="custom-tooltip">Alterna a exibição das palavras de conexão estrutural (artigos, preposições e conjunções).</div>
+        <div class="scene-controls-wrap">
+          <div class="scene-controls">
+            <div class="btn-tooltip-wrap">
+              <button id="toggle-connectives" class="trace-btn" type="button" aria-pressed="false">Conectivos</button>
+              <div class="custom-tooltip">Alterna a exibição das palavras de conexão estrutural (artigos, preposições e conjunções).</div>
+            </div>
+            <div class="btn-tooltip-wrap">
+              <button id="highlight-trace" class="trace-btn" type="button" aria-pressed="false">Linha da Resposta</button>
+              <div class="custom-tooltip">Destaca a sequência contínua de palavras geradas na resposta do modelo.</div>
+            </div>
+            <div class="btn-tooltip-wrap">
+              <button id="trajectory-btn" class="trace-btn" type="button" aria-pressed="false">Trajetória</button>
+              <div class="custom-tooltip">Exibe o rastro passo a passo da formação do pensamento da IA.</div>
+            </div>
+            <button id="pause" aria-pressed="false">Pausar movimento</button>
+            <button id="reset">Recentralizar</button>
+            <button id="fullscreen-btn" class="trace-btn" type="button" aria-pressed="false" title="Alterna o modo de tela cheia para o universo 3D">⛶ Tela cheia</button>
           </div>
-          <div class="btn-tooltip-wrap">
-            <button id="highlight-trace" class="trace-btn" type="button" aria-pressed="false">Linha da Resposta</button>
-            <div class="custom-tooltip">Destaca a sequência contínua de palavras geradas na resposta do modelo.</div>
-          </div>
-          <div class="btn-tooltip-wrap">
-            <button id="trajectory-btn" class="trace-btn" type="button" aria-pressed="false">Trajetória</button>
-            <div class="custom-tooltip">Exibe o rastro passo a passo da formação do pensamento da IA.</div>
-          </div>
-          <button id="pause" aria-pressed="false">Pausar movimento</button>
-          <button id="reset">Recentralizar</button>
-          <button id="fullscreen-btn" class="trace-btn" type="button" aria-pressed="false" title="Alterna o modo de tela cheia para o universo 3D">⛶ Tela cheia</button>
+          <span class="scene-hint">Arrastar = Orbitar | Scroll = Aproximar | Clicar = Inspecionar</span>
         </div>
       </div>
       
@@ -100,7 +103,6 @@
       
       <div class="scene-footer">
         <div id="legend"></div>
-        <span class="scene-hint">Arraste para orbitar · role para aproximar · clique para inspecionar</span>
       </div>
       <div id="inspector" hidden></div>
     </section>

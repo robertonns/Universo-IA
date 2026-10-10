@@ -110,6 +110,7 @@ let trajectoryStepStartTime = 0;
 let trajectoryTimer = null;
 let replySequence = [];
 let connectivesVisible = false;
+let priorConnectivesState = null;
 let activeDimension = null;
 let currentSelectedStep = null;
 let lastStepCandidates = [];
@@ -363,14 +364,19 @@ function applyGraph(graphData) {
   $('nodes').textContent = `${nodesCount} / ${edgesCount}`;
   $('scene-empty').hidden = nodesCount > 0;
 
-  // 6. Legenda interativa com foco de dimensão por clique (exclui conectivos e fixa conceito/cognição no final dos grupos estáveis)
-  let rawGroups = (Array.isArray(graphData.groups) ? graphData.groups : []).filter(g => g !== 'conectivos');
+  // 6. Legenda interativa com foco de dimensão por clique (com conectivos por último e isolamento inteligente)
+  const allGroups = Array.isArray(graphData.groups) ? graphData.groups : [];
+  const hasConnectives = allGroups.includes('conectivos') || (Array.isArray(graphData.nodes) && graphData.nodes.some(n => n.group === 'conectivos'));
+  const rawGroups = allGroups.filter(g => g !== 'conectivos');
   const hasCognicao = rawGroups.includes('conceito/cognição');
   const standardGroups = rawGroups.filter(g => !g.startsWith('tema:') && !g.startsWith('ação:') && !g.startsWith('qualidade:') && !g.startsWith('conceito:') && g !== 'conceito/cognição');
   const dynamicGroups = rawGroups.filter(g => g.startsWith('tema:') || g.startsWith('ação:') || g.startsWith('qualidade:') || g.startsWith('conceito:'));
-  const groups = hasCognicao
-    ? [...standardGroups, 'conceito/cognição', ...dynamicGroups]
-    : [...standardGroups, ...dynamicGroups];
+  const groups = [
+    ...standardGroups,
+    ...(hasCognicao ? ['conceito/cognição'] : []),
+    ...dynamicGroups,
+    ...(hasConnectives ? ['conectivos'] : [])
+  ];
 
   $('legend').replaceChildren(...groups.map(g => {
     const s = document.createElement('span');
@@ -379,11 +385,34 @@ function applyGraph(graphData) {
     s.classList.toggle('active', activeDimension === g);
     s.title = `Clique para isolar a dimensão "${g}"`;
     s.onclick = () => {
-      if (activeDimension === g) {
-        activeDimension = null;
+      if (g === 'conectivos') {
+        if (activeDimension === 'conectivos') {
+          // Deseleciona agrupamento conectivos: restaura o estado anterior do botão
+          activeDimension = null;
+          if (priorConnectivesState !== null) {
+            connectivesVisible = priorConnectivesState;
+            priorConnectivesState = null;
+            storage.set(STORAGE_KEYS.CONNECTIVES, connectivesVisible);
+            updateConnectivesButton();
+          }
+        } else {
+          // Seleciona agrupamento conectivos: salva o estado anterior do botão e força exibição isolada
+          priorConnectivesState = connectivesVisible;
+          activeDimension = 'conectivos';
+          connectivesVisible = true;
+          updateConnectivesButton();
+        }
       } else {
-        activeDimension = g;
+        // Clicou em outro grupo qualquer
+        if (activeDimension === 'conectivos' && priorConnectivesState !== null) {
+          connectivesVisible = priorConnectivesState;
+          priorConnectivesState = null;
+          storage.set(STORAGE_KEYS.CONNECTIVES, connectivesVisible);
+          updateConnectivesButton();
+        }
+        activeDimension = (activeDimension === g) ? null : g;
       }
+
       for (const chip of $('legend').children) {
         chip.classList.toggle('active', chip.textContent === activeDimension);
       }
@@ -652,9 +681,12 @@ function frame(time = 0) {
 
       const matchSource = edge.userData.sourceNode.data.group === activeDimension;
       const matchTarget = edge.userData.targetNode.data.group === activeDimension;
-      if (matchSource && matchTarget) {
+      const matchEdge = (activeDimension === 'conectivos')
+        ? (matchSource || matchTarget)
+        : (matchSource && matchTarget);
+      if (matchEdge) {
         edge.material.color.copy(edge.userData.baseColor);
-        edge.material.opacity += (0.55 - edge.material.opacity) * 0.15;
+        edge.material.opacity += (0.50 - edge.material.opacity) * 0.15;
       } else {
         edge.material.color.copy(edge.userData.baseColor);
         edge.material.opacity += (0.02 - edge.material.opacity) * 0.15;
@@ -718,6 +750,12 @@ stage.addEventListener('pointerup', e => {
 
   // Ao clicar no palco 3D (seja em espaço vazio ou em uma palavra), cancela agrupamento selecionado na legenda
   if (activeDimension) {
+    if (activeDimension === 'conectivos' && priorConnectivesState !== null) {
+      connectivesVisible = priorConnectivesState;
+      priorConnectivesState = null;
+      storage.set(STORAGE_KEYS.CONNECTIVES, connectivesVisible);
+      updateConnectivesButton();
+    }
     activeDimension = null;
     const legendElem = $('legend');
     if (legendElem) {
@@ -888,6 +926,7 @@ function updateConnectivesButton() {
 const btnConnectives = $('toggle-connectives');
 if (btnConnectives) {
   btnConnectives.onclick = () => {
+    priorConnectivesState = null;
     connectivesVisible = !connectivesVisible;
     storage.set(STORAGE_KEYS.CONNECTIVES, connectivesVisible);
     updateConnectivesButton();
@@ -1653,9 +1692,9 @@ updatePauseButton();
 health();
 setInterval(health, 15000);
 
-// Disparo inicial se houver texto prévio no carregamento
-setTimeout(() => {
-  if ($('prompt').value && $('prompt').value !== currentText) {
-    submit();
-  }
-}, 350);
+// Sincronização passiva do contador se houver texto prévio no navegador (sem disparar inferência concorrente no boot)
+if ($('prompt').value) {
+  const initialText = $('prompt').value;
+  const maxChars = (BALANCE_PRESETS[currentPreset] || BALANCE_PRESETS.balanced).maxChars;
+  $('chars').textContent = `${initialText.length} / ${maxChars} (até ~${currentPromptTokens} tokens)`;
+}

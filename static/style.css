@@ -485,7 +485,19 @@ textarea::placeholder {
   text-align: center;
 }
 
-.btn-tooltip-wrap:hover .custom-tooltip,
+.btn-tooltip-wrap .custom-tooltip {
+  top: calc(100% + 8px);
+  bottom: auto;
+  transform: translateX(-50%) translateY(-4px);
+  transition-delay: 0s;
+}
+
+.btn-tooltip-wrap:hover .custom-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  transition-delay: 750ms;
+}
+
 .metric-item:hover .custom-tooltip {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
@@ -502,10 +514,18 @@ textarea::placeholder {
   pointer-events: none;
 }
 
-.scene-head > div {
+.scene-head > div:first-child {
   display: flex;
   gap: 18px;
   align-items: center;
+}
+
+.scene-controls-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  pointer-events: auto;
 }
 
 .scene-controls {
@@ -609,9 +629,7 @@ textarea::placeholder {
   right: 20px;
   bottom: 12px;
   display: flex;
-  justify-content: space-between;
   align-items: flex-end;
-  gap: 12px;
   pointer-events: none;
   font-size: 11px;
   color: #8c9db1;
@@ -623,19 +641,22 @@ textarea::placeholder {
   white-space: nowrap;
   pointer-events: none;
   user-select: none;
-  padding-bottom: 2px;
   opacity: 0.85;
+  text-align: right;
+  padding-right: 2px;
+  letter-spacing: 0.2px;
 }
 
 #legend {
   display: flex;
   gap: 3px 6px;
   flex-wrap: wrap;
-  max-height: 48px;
+  max-height: 52px;
   overflow-y: auto;
   scrollbar-width: none;
   align-items: center;
   pointer-events: auto;
+  width: 100%;
 }
 
 #legend span {

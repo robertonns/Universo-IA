@@ -612,8 +612,8 @@ def graph(text: str, answer: str = '', step_candidates: list = None, is_demo: bo
 
     # Ordenação da legenda: grupos semânticos estáveis no meio,
     # 'conceito/cognição' fixado sempre ao final dos grupos estáveis,
-    # e grupos dinâmicos ('conceito:', 'ação:', 'qualidade:', 'tema:') obrigatoriamente por último (à direita).
-    # Conectivos são excluídos da legenda (possuem controle exclusivo no botão dedicado).
+    # grupos dinâmicos ('conceito:', 'ação:', 'qualidade:', 'tema:') em seguida,
+    # e 'conectivos' obrigatoriamente por último para permitir inspeção isolada.
     all_groups = list(dict.fromkeys(n['group'] for n in nodes))
     standard_groups = [
         g for g in all_groups
@@ -626,7 +626,8 @@ def graph(text: str, answer: str = '', step_candidates: list = None, is_demo: bo
         g for g in all_groups
         if any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:'))
     ]
-    sorted_groups = standard_groups + cognicao_group + dynamic_groups
+    connectivos_group = ['conectivos'] if 'conectivos' in all_groups else []
+    sorted_groups = standard_groups + cognicao_group + dynamic_groups + connectivos_group
 
     return dict(
         nodes=nodes,
@@ -818,7 +819,7 @@ async def api_generate(data: dict):
                 top_p=1.0,
                 top_k=0,
                 logprobs=True,
-                top_logprobs=50,
+                top_logprobs=25,
                 cache_prompt=True
             )
 

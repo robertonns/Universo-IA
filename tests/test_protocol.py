@@ -314,8 +314,8 @@ class ProtocolTests(unittest.TestCase):
         cross_triangle_pair = tuple(sorted(['capital', 'brasília']))
         self.assertNotIn(cross_triangle_pair, edges_map, f"Aresta cruzada {cross_triangle_pair} não deveria existir no grafo")
 
-        # Valida que 'conectivos' e domínios não relacionados NÃO aparecem na legenda
-        self.assertNotIn('conectivos', res['groups'])
+        # Valida que 'conectivos' aparece no final da legenda para inspeção isolada e domínios não relacionados NÃO aparecem
+        self.assertEqual(res['groups'][-1], 'conectivos', "'conectivos' deve ser o último grupo para permitir isolamento na legenda")
         self.assertNotIn('economia', res['groups'])
         self.assertNotIn('economia/valor', res['groups'])
         self.assertTrue(
@@ -459,17 +459,33 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(server.reconstruct_candidate_word('mane'), 'maneira')
         self.assertEqual(server.reconstruct_candidate_word('torn'), 'tornar')
 
-        # 2. Ordenação da legenda: conceito/cognição deve ficar no final dos grupos estáveis
+        # 2. Ordenação da legenda: conceito/cognição deve ficar no final dos grupos estáveis e conectivos por último
         res = server.graph('inteligência artificial tecnologia brasil capital', 'o modelo pensa sobre a mente e dados')
         groups = res['groups']
         if 'conceito/cognição' in groups:
-            standard_without_dyn = [g for g in groups if not any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:'))]
+            standard_without_dyn = [g for g in groups if not any(g.startswith(p) for p in ('tema:', 'ação:', 'qualidade:', 'conceito:')) and g != 'conectivos']
             self.assertEqual(standard_without_dyn[-1], 'conceito/cognição', "conceito/cognição deve ser o último dos grupos estáveis")
+        if 'conectivos' in groups:
+            self.assertEqual(groups[-1], 'conectivos', "conectivos deve ser sempre o último grupo da legenda")
 
         # 3. Modo demonstração preserva arestas de grupo lexical
         demo_graph = server.graph('inteligência tecnologia', 'computador modelo software algoritmo', is_demo=True)
         lexical_edges = [e for e in demo_graph['edges'] if e.get('kind') == 'grupo lexical']
         self.assertGreater(len(lexical_edges), 0, "Modo demonstração deve manter conexões temáticas entre termos da resposta")
+
+    def test_connectives_isolation_group_and_cpu_optimization(self):
+        """Valida que conectivos é sempre o último grupo da legenda e que as configurações de CPU estão otimizadas."""
+        res = server.graph('como a inteligência artificial entende a linguagem?', 'a inteligência artificial compreende o texto através de padrões matemáticos e redes neurais.')
+        groups = res['groups']
+        self.assertIn('conectivos', groups)
+        self.assertEqual(groups[-1], 'conectivos', "conectivos deve obrigatoriamente ser o último grupo da legenda")
+        
+        # Valida propriedades dos nós de conectivos
+        conn_nodes = [n for n in res['nodes'] if n['group'] == 'conectivos']
+        self.assertGreater(len(conn_nodes), 0, "Devem existir nós de conectivos")
+        for cn in conn_nodes:
+            self.assertEqual(cn['origin'], 'conectivo')
+            self.assertEqual(cn['weight'], 0.22)
 
 
 if __name__ == '__main__':
