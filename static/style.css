@@ -709,13 +709,39 @@ textarea::placeholder {
   position: absolute;
   bottom: 50px;
   left: 20px;
-  background: rgba(11, 19, 35, 0.93);
+  background: rgba(11, 19, 35, 0.95);
   border: 1px solid #47647a;
   border-radius: 8px;
   padding: 12px 18px;
-  max-width: 320px;
+  max-width: 340px;
   font-size: 13px;
   backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7);
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.inspector-word {
+  font-size: 15px;
+  color: #fff;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 4px;
+  margin-bottom: 2px;
+}
+
+.inspector-item {
+  font-size: 12px;
+  color: #c9d6e5;
+  line-height: 1.35;
+}
+
+.inspector-label {
+  color: #8c9db1;
+  font-weight: 500;
 }
 
 
@@ -967,11 +993,27 @@ summary {
 
 footer {
   display: flex;
-  justify-content: space-between;
-  gap: 15px;
+  flex-direction: column;
+  gap: 8px;
   margin: 30px 0 40px;
   font-size: 11px;
   color: #66778c;
+}
+
+.footer-top-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.footer-tip {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #7e93a7;
+  letter-spacing: 0.15px;
+  line-height: 1.45;
+  opacity: 0.92;
 }
 
 .sr {

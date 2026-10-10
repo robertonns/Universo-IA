@@ -767,9 +767,23 @@ stage.addEventListener('pointerup', e => {
 
   if (focus && nodes.has(focus)) {
     const n = nodes.get(focus).data;
-    const weightVal = typeof n.weight === 'number' ? n.weight.toFixed(2) : n.weight;
-    const weightLabel = n.group === 'probabilidade' ? 'probabilidade' : 'peso lexical';
-    $('inspector').textContent = `${n.id} · ${n.group} · origem: ${n.origin} · ${weightLabel}: ${weightVal}`;
+    const numWeight = typeof n.weight === 'number' ? n.weight : parseFloat(n.weight) || 0;
+    const percentVal = Math.round(numWeight * 10000) / 100;
+    const percentStr = (percentVal % 1 === 0)
+      ? `${percentVal}%`
+      : `${percentVal.toFixed(2).replace('.', ',')}%`;
+
+    let originStr = n.origin || '';
+    if (originStr === 'alternativa concorrente') {
+      originStr = 'alternativa concorrente (palavra concorrente)';
+    }
+
+    $('inspector').innerHTML = `
+      <div class="inspector-word"><strong>${n.id}</strong></div>
+      <div class="inspector-item"><span class="inspector-label">Relevância Lexical:</span> ${percentStr}</div>
+      <div class="inspector-item"><span class="inspector-label">Dimensão Semântica:</span> ${n.group}</div>
+      <div class="inspector-item"><span class="inspector-label">Origem:</span> ${originStr}</div>
+    `;
   }
 });
 

@@ -209,6 +209,7 @@ INTERMEDIATE_HYPERNYMS = {
         'computação', 'digital', 'telescópio', 'satélite', 'foguete'
     },
     'processo/ação': {
+        'processo', 'processos', 'processa', 'processar',
         'processamento', 'aprendizado', 'treinamento', 'desenvolvimento', 'construção', 'fundação',
         'movimento', 'transformação', 'criação', 'produção', 'operação', 'transmissão', 'pesquisa',
         'exercício', 'competição', 'partida', 'treino', 'corrida', 'jogo',
@@ -333,17 +334,17 @@ def reconstruct_candidate_word(raw_stem: str) -> str:
     if w in ALL_GROUP_WORDS or any(w in terms for terms in INTERMEDIATE_HYPERNYMS.values()):
         return w
 
-    # 3. Busca por prefixo no vocabulário oficial (quando w tem pelo menos 4 caracteres)
-    if len(w) >= 4:
-        matches = [full_w for full_w in ALL_GROUP_WORDS if full_w.startswith(w) and len(full_w) > len(w)]
-        if matches:
-            return min(matches, key=len)
-
-    # 4. Descarte imediato de terminações impossíveis na língua portuguesa
+    # 3. Descarte imediato de terminações impossíveis na língua portuguesa
     # (consoantes oclusivas/fricativas mudas ou encontros consonantais que caracterizam radicais cortados)
     if w.endswith(('b', 'c', 'd', 'f', 'g', 'h', 'j', 'k', 'p', 'q', 't', 'v', 'w',
                    'nd', 'nt', 'ss', 'rr', 'mp', 'mb', 'st', 'ct', 'pt', 'ft', 'lt', 'rt')):
         return None
+
+    # 4. Busca por prefixo no vocabulário oficial (quando w tem pelo menos 4 caracteres)
+    if len(w) >= 4:
+        matches = [full_w for full_w in ALL_GROUP_WORDS if full_w.startswith(w) and len(full_w) > len(w)]
+        if matches:
+            return min(matches, key=len)
 
     # 5. Palavras morfologicamente completas com terminações válidas em português
     if len(w) >= 4 and w.endswith((
@@ -485,8 +486,20 @@ def graph(text: str, answer: str = '', step_candidates: list = None, is_demo: bo
                     break
             real_candidates_list.extend(step_valid)
 
+    # Regra de Coerência Temática: alternativas concorrentes só são admitidas na nuvem 3D se
+    # pertencerem às dimensões semânticas ativas na conversa (pergunta ou resposta), evitando ilhas órfãs alienígenas
+    active_dims = {
+        resolve_word_group(w) or fallback_hypernym(w)
+        for w in (source + reply)
+        if w not in CONNECTIVES and (resolve_word_group(w) or fallback_hypernym(w))
+    }
+    coherent_candidates_list = [
+        (w, p) for w, p in real_candidates_list
+        if not active_dims or (resolve_word_group(w) or fallback_hypernym(w)) in active_dims
+    ]
+
     # Limite saudável de alternativas concorrentes na nuvem para manter 60 FPS
-    cand_nodes_data = real_candidates_list[:30]
+    cand_nodes_data = coherent_candidates_list[:30]
     cand_words = [w for w, _ in cand_nodes_data]
     cand_prob_map = dict(cand_nodes_data)
 

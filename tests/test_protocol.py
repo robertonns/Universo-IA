@@ -487,6 +487,32 @@ class ProtocolTests(unittest.TestCase):
             self.assertEqual(cn['origin'], 'conectivo')
             self.assertEqual(cn['weight'], 0.22)
 
+    def test_cluster_coherence_and_no_orphan_islands(self):
+        """Valida que termos concorrentes de domínios alienígenas (ex: primavera/passagem) são filtrados, eliminando ilhas órfãs."""
+        mock_steps = [
+            {
+                'token': ' inteligência',
+                'step': 0,
+                'candidates': [
+                    {'token': ' software', 'probability': 0.25},
+                    {'token': ' primavera', 'probability': 0.18},
+                    {'token': ' passagem', 'probability': 0.15}
+                ]
+            }
+        ]
+        res = server.graph('Como a inteligência artificial entende a linguagem?', 'A IA processa texto e dados.', step_candidates=mock_steps)
+        node_ids = {n['id'] for n in res['nodes']}
+
+        # Termo afim com artefato/tecnologia deve ser admitido
+        self.assertIn('software', node_ids)
+
+        # Termos alienígenas de lugar/geografia NÃO devem ser admitidos como ilha órfã
+        self.assertNotIn('primavera', node_ids)
+        self.assertNotIn('passagem', node_ids)
+
+        # O radical cortado com terminação 'ss' deve ser descartado
+        self.assertIsNone(server.reconstruct_candidate_word('pass'))
+
 
 if __name__ == '__main__':
     unittest.main()
