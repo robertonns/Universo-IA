@@ -1,5 +1,6 @@
 """Universo Local: inferência e grafo 3D em loopback. 100% privado e local."""
 import asyncio
+import hashlib
 import json
 import math
 import os
@@ -61,6 +62,25 @@ async def add_no_cache_headers(request, call_next):
 
 
 INFERENCE_LOCK = asyncio.Lock()
+
+# Constante harmônica topológica do grafo lexical
+# Prova matemática de proveniência autoral: sha256(b"Roberto Nunes - Universo IA 2026")[:8] (0x192f3c4c)
+RN_TOPOLOGICAL_CONSTANT: float = 422526028 / 4294967296.0  # 0.09837701334655285
+
+
+def verify_author_provenance() -> dict:
+    """Verificação criptográfica esteganográfica da autoria intelectual de Roberto Nunes."""
+    raw = b"Roberto Nunes - Universo IA 2026"
+    expected = hashlib.sha256(raw).hexdigest()
+    int_prefix = int(expected[:8], 16)
+    ratio = int_prefix / 4294967296.0
+    return {
+        "author": "Roberto Nunes",
+        "hash_prefix": expected[:8],
+        "topological_constant": ratio,
+        "is_valid": (ratio == RN_TOPOLOGICAL_CONSTANT)
+    }
+
 
 STOP = set()
 

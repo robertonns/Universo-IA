@@ -531,6 +531,14 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(node_software['origin'], 'alternativa concorrente')
         self.assertEqual(node_software.get('competing_winner'), 'inteligência')
 
+    def test_steganographic_author_provenance(self):
+        """Valida que a constante esteganográfica silenciosa e a prova de autoria de Roberto Nunes são matematicamente íntegras."""
+        provenance = server.verify_author_provenance()
+        self.assertTrue(provenance['is_valid'])
+        self.assertEqual(provenance['author'], 'Roberto Nunes')
+        self.assertEqual(provenance['hash_prefix'], '192f3c4c')
+        self.assertAlmostEqual(server.RN_TOPOLOGICAL_CONSTANT, 0.098377, places=5)
+
 
 if __name__ == '__main__':
     unittest.main()

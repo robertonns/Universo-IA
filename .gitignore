@@ -16,8 +16,8 @@ models/*.bin
 runtime/*.exe
 runtime/*.dll
 runtime/*.zip
-runtime/LICENSE*
 !runtime/versoes.json
+!runtime/LICENSE*
 
 # Logs e arquivos de sistema
 *.log
