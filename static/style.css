@@ -711,20 +711,18 @@ textarea::placeholder {
   position: absolute;
   bottom: 50px;
   left: 20px;
-  background: rgba(10, 18, 30, 0.40);
+  background: transparent;
   border: none;
-  border-radius: 6px;
-  padding: 8px 12px;
+  padding: 0;
   max-width: 340px;
   font-size: 11.5px;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
   display: flex;
   flex-direction: column;
   gap: 3px;
   box-shadow: none;
   z-index: 10;
   pointer-events: auto;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 
 #inspector[hidden] {
