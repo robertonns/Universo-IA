@@ -513,6 +513,24 @@ class ProtocolTests(unittest.TestCase):
         # O radical cortado com terminação 'ss' deve ser descartado
         self.assertIsNone(server.reconstruct_candidate_word('pass'))
 
+    def test_competing_winner_metadata(self):
+        """Valida que nós de alternativas concorrentes carregam o termo vencedor contra o qual concorreram."""
+        mock_steps = [
+            {
+                'token': ' inteligência',
+                'step': 0,
+                'candidates': [
+                    {'token': ' software', 'probability': 0.25}
+                ]
+            }
+        ]
+        res = server.graph('Como a IA funciona?', 'A IA processa texto e tecnologia.', step_candidates=mock_steps)
+        nodes_by_id = {n['id']: n for n in res['nodes']}
+        self.assertIn('software', nodes_by_id)
+        node_software = nodes_by_id['software']
+        self.assertEqual(node_software['origin'], 'alternativa concorrente')
+        self.assertEqual(node_software.get('competing_winner'), 'inteligência')
+
 
 if __name__ == '__main__':
     unittest.main()

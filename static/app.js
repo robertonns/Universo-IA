@@ -427,7 +427,7 @@ function resize() {
   const w = stage.clientWidth;
   const h = stage.clientHeight;
   if (w === 0 || h === 0) return;
-  renderer.setSize(w, h, false);
+  renderer.setSize(w, h, true);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -742,11 +742,17 @@ stage.addEventListener('pointerup', e => {
 
   const sprites = [];
   for (const n of nodes.values()) {
-    sprites.push(n.sprite);
+    if (n.sprite && n.sprite.visible) {
+      sprites.push(n.sprite);
+    }
   }
   const found = ray.intersectObjects(sprites);
   focus = found[0]?.object.userData.id || null;
-  $('inspector').hidden = !focus;
+  const inspectorElem = $('inspector');
+  if (inspectorElem) {
+    inspectorElem.hidden = !focus;
+    if (!focus) inspectorElem.innerHTML = '';
+  }
 
   // Ao clicar no palco 3D (seja em espaço vazio ou em uma palavra), cancela agrupamento selecionado na legenda
   if (activeDimension) {
@@ -775,15 +781,20 @@ stage.addEventListener('pointerup', e => {
 
     let originStr = n.origin || '';
     if (originStr === 'alternativa concorrente') {
-      originStr = 'alternativa concorrente (palavra concorrente)';
+      const winner = n.competing_winner || n.raw_token || '';
+      originStr = winner
+        ? `alternativa concorrente (${winner})`
+        : 'alternativa concorrente';
     }
 
-    $('inspector').innerHTML = `
-      <div class="inspector-word"><strong>${n.id}</strong></div>
-      <div class="inspector-item"><span class="inspector-label">Relevância Lexical:</span> ${percentStr}</div>
-      <div class="inspector-item"><span class="inspector-label">Dimensão Semântica:</span> ${n.group}</div>
-      <div class="inspector-item"><span class="inspector-label">Origem:</span> ${originStr}</div>
-    `;
+    if (inspectorElem) {
+      inspectorElem.innerHTML = `
+        <div class="inspector-word"><strong>${n.id}</strong></div>
+        <div class="inspector-item"><span class="inspector-label">Relevância Lexical:</span> ${percentStr}</div>
+        <div class="inspector-item"><span class="inspector-label">Dimensão Semântica:</span> ${n.group}</div>
+        <div class="inspector-item"><span class="inspector-label">Origem:</span> ${originStr}</div>
+      `;
+    }
   }
 });
 
@@ -816,7 +827,11 @@ $('reset').onclick = () => {
   pitch = 0;
   zoom = 17;
   focus = null;
-  $('inspector').hidden = true;
+  const inspectorElem = $('inspector');
+  if (inspectorElem) {
+    inspectorElem.hidden = true;
+    inspectorElem.innerHTML = '';
+  }
 };
 
 // Controle de Pausa da Animação
@@ -1264,10 +1279,8 @@ function deselectStepCandidate() {
     spans.forEach(s => s.classList.remove('active'));
   }
   if (lastStepCandidates && lastStepCandidates.length) {
-    const defaultStep = (lastStepCandidates[lastStepCandidates.length - 1].is_tail && lastStepCandidates.length >= 2)
-      ? lastStepCandidates[lastStepCandidates.length - 2]
-      : lastStepCandidates[lastStepCandidates.length - 1];
-    updateCandidatesPanel(defaultStep.candidates || []);
+    const defaultStep = lastStepCandidates[lastStepCandidates.length - 1];
+    updateCandidatesPanel(defaultStep?.candidates || []);
   }
   const ebDir = $('eyebrow-direct');
   const ebInd = $('eyebrow-indirect');
@@ -1421,6 +1434,13 @@ async function submit(text = $('prompt').value) {
   const requestVersion = version;
   currentText = text;
   $('input-status').textContent = 'Atualização automática · espaço + 250 ms';
+
+  focus = null;
+  const inspectorElem = $('inspector');
+  if (inspectorElem) {
+    inspectorElem.hidden = true;
+    inspectorElem.innerHTML = '';
+  }
 
   if (!text.trim()) {
     applyGraph({ nodes: [], edges: [], groups: [] });
@@ -1586,6 +1606,12 @@ async function submit(text = $('prompt').value) {
 
 // Ouvintes de entrada no campo de texto
 $('prompt').addEventListener('input', e => {
+  focus = null;
+  const inspectorElem = $('inspector');
+  if (inspectorElem) {
+    inspectorElem.hidden = true;
+    inspectorElem.innerHTML = '';
+  }
   updateCharCounter();
   clearTimeout(pauseTimer);
   if (e.isComposing) return;
@@ -1703,6 +1729,11 @@ updateTraceButton();
 updateTrajectoryButton();
 updateConnectivesButton();
 updatePauseButton();
+const inspectorBoot = $('inspector');
+if (inspectorBoot) {
+  inspectorBoot.hidden = true;
+  inspectorBoot.innerHTML = '';
+}
 health();
 setInterval(health, 15000);
 

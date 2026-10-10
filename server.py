@@ -481,7 +481,8 @@ def graph(text: str, answer: str = '', step_candidates: list = None, is_demo: bo
                     continue
 
                 seen_cand_words.add(full_w)
-                step_valid.append((full_w, p))
+                winner_tok = (step.get('token') or '').strip()
+                step_valid.append((full_w, p, winner_tok, raw_tok.strip()))
                 if len(step_valid) >= 3:
                     break
             real_candidates_list.extend(step_valid)
@@ -494,14 +495,16 @@ def graph(text: str, answer: str = '', step_candidates: list = None, is_demo: bo
         if w not in CONNECTIVES and (resolve_word_group(w) or fallback_hypernym(w))
     }
     coherent_candidates_list = [
-        (w, p) for w, p in real_candidates_list
-        if not active_dims or (resolve_word_group(w) or fallback_hypernym(w)) in active_dims
+        item for item in real_candidates_list
+        if not active_dims or (resolve_word_group(item[0]) or fallback_hypernym(item[0])) in active_dims
     ]
 
     # Limite saudável de alternativas concorrentes na nuvem para manter 60 FPS
     cand_nodes_data = coherent_candidates_list[:30]
-    cand_words = [w for w, _ in cand_nodes_data]
-    cand_prob_map = dict(cand_nodes_data)
+    cand_words = [item[0] for item in cand_nodes_data]
+    cand_prob_map = {item[0]: item[1] for item in cand_nodes_data}
+    cand_winner_map = {item[0]: item[2] for item in cand_nodes_data}
+    cand_raw_map = {item[0]: item[3] for item in cand_nodes_data}
 
     keys = list(dict.fromkeys(source + reply + cand_words))[-110:]
 
@@ -543,6 +546,11 @@ def graph(text: str, answer: str = '', step_candidates: list = None, is_demo: bo
             in_reply=(w in reply),
             in_source=(w in source)
         )
+        if origin == 'alternativa concorrente':
+            raw_w = cand_winner_map.get(w, '')
+            clean_w_list = words(raw_w)
+            node_dict['competing_winner'] = clean_w_list[0] if clean_w_list else raw_w
+            node_dict['raw_token'] = cand_raw_map.get(w, '')
         if prob is not None:
             node_dict['probability'] = round(prob * 100, 1)
         nodes.append(node_dict)
@@ -903,7 +911,7 @@ async def api_generate(data: dict):
                 'done',
                 answer=answer,
                 graph=graph(text, answer, step_candidates=step_history, is_demo=False),
-                candidates=step_history[-2]['candidates'] if (step_history and step_history[-1].get('is_tail') and len(step_history) >= 2) else (step_history[-1]['candidates'] if step_history else []),
+                candidates=step_history[-1]['candidates'] if step_history else [],
                 step_candidates=step_history,
                 max_tokens_config=max_tokens,
                 ttft_ms=ttft_ms,
