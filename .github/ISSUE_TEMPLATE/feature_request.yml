@@ -1,0 +1,34 @@
+name: Sugestão de Melhoria (Feature Request)
+description: Proponha uma nova ideia, agrupamento lexical ou funcionalidade para o Universo IA.
+title: "[Sugestão]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideias e sugestões são muito bem-vindas! Descreva sua proposta de melhoria abaixo.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Sua sugestão está relacionada a um problema ou limitação existente?
+      description: Uma descrição clara de qual é a limitação atual.
+      placeholder: Sinto falta de poder comparar a rota de tokens com...
+    validations:
+      required: false
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Descreva a Solução Desejada
+      description: Explique como você imagina essa funcionalidade operando na interface ou no backend.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas Consideradas
+      description: Alguma outra abordagem ou solução alternativa que você avaliou?
+    validations:
+      required: false

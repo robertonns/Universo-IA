@@ -1,0 +1,47 @@
+name: Relato de Erro (Bug Report)
+description: Crie um relatório para nos ajudar a identificar e corrigir uma falha no Universo IA.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Agradecemos por relatar o problema! Por favor, forneça as informações abaixo com o máximo de detalhes para facilitar a reprodução do erro.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Descrição do Problema
+      description: Uma explicação clara e objetiva sobre o que ocorreu de errado.
+      placeholder: Ao clicar em uma palavra da nuvem 3D...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para Reproduzir
+      description: Descreva o passo a passo exato para recriar o comportamento incorreto.
+      placeholder: |
+        1. Iniciar o aplicativo via INICIAR_APP.bat
+        2. Digitar a pergunta '...'
+        3. Clicar no botão '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento Esperado
+      description: Uma descrição clara do que você esperava que acontecesse.
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Ambiente do Sistema
+      description: Sistema Operacional, processador, versão do Python e navegador utilizado.
+      placeholder: Windows 11 x64, Intel i7-4500U, Python 3.11, Google Chrome 128
+    validations:
+      required: true

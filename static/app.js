@@ -1743,3 +1743,7 @@ if ($('prompt').value) {
   const maxChars = (BALANCE_PRESETS[currentPreset] || BALANCE_PRESETS.balanced).maxChars;
   $('chars').textContent = `${initialText.length} / ${maxChars} (até ~${currentPromptTokens} tokens)`;
 }
+
+// Suporte para testes e automação
+window.__universo = { nodes, camera, stage, renderer };
+
