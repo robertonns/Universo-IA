@@ -5,6 +5,15 @@ O formato é baseado no padrão [Keep a Changelog](https://keepachangelog.com/pt
 
 ---
 
+## [0.5.9] - 2026-10-10
+
+### Modificado
+- Regravação da demonstração visual interativa (`docs/demo.gif`, `docs/demo.png`) com inferência integral de 140 tokens e constelação 3D estabilizada com 72 nós e 202 conexões.
+- Pausas ampliadas para visualização nítida do inspetor transparente e das tabelas de probabilidades direta/indireta do Modo Investigativo.
+- Remoção do arquivo legado `LEIA-ME.md`, centralizando toda a documentação oficial exclusivamente no `README.md`.
+
+---
+
 ## [0.5.8] - 2026-10-10
 
 ### Adicionado
