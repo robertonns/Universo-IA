@@ -41,6 +41,12 @@ A mecânica interna de um Large Language Model é frequentemente tratada como um
 - **Filtro de Conectivos Estruturais**: Alternância instantânea que permite ocultar ou evidenciar palavras funcionais de ligação sem fragmentar as conexões semânticas entre conceitos centrais.
 - **Privacidade Absoluta e Custo Zero**: Nenhum dado trafega fora da sua máquina local. Sem telemetria oculta, sem cadastros, sem custos por token ou dependência de internet após a instalação inicial.
 
+### Topologia Tridimensional e Trajetória Neural
+
+![Topologia Tridimensional e Trajetória Neural](docs/trajetoria-3d.gif)
+
+*Navegação orbital a 60 FPS: agrupamento semântico dinâmico, realce da linha de pensamento em pulso dourado e condução do cometa de trajetória ao longo da resposta gerada.*
+
 ---
 
 ## Início Rápido (Quickstart)
@@ -167,6 +173,12 @@ Diferente de interfaces de chat tradicionais, o Universo IA expõe diretamente a
 | **Pergunta Detalhada** | ~1.500 tokens | 60 tokens | Perguntas longas, análise de parágrafos extensos | Menor tempo de resposta final |
 | **Equilibrado** | ~900 tokens | 140 tokens | Perguntas cotidianas com respostas completas e explicativas | Equilíbrio ideal para CPU |
 | **Resposta Expandida** | ~400 tokens | 260 tokens | Perguntas diretas que demandam geração detalhada e rica | Maior profundidade na nuvem 3D |
+
+### Modo Investigativo e Auditoria de Probabilidades
+
+![Modo Investigativo e Balança de Tokens](docs/modo-investigativo.gif)
+
+*Inspeção retrospectiva de amostragem: clique em qualquer token da resposta para revelar a distribuição de probabilidade das alternativas diretas e indiretas computadas pelo modelo.*
 
 ---
 

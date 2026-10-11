@@ -5,6 +5,19 @@ O formato é baseado no padrão [Keep a Changelog](https://keepachangelog.com/pt
 
 ---
 
+## [0.6.0] - 2026-10-10
+
+### Adicionado
+- Masterização e síntese dos novos vídeos em alta definição gravados pelo autor em 3 demonstrações em GIF otimizadas (< 8 MB, paleta de 128 cores com dithering Bayer e reamostragem Lanczos):
+  - `docs/demo.gif` (6.73 MB, 21.0s): Demonstração visual de ponta a ponta (prompt, florescimento da nuvem 3D, inspeção lexical transparente, conectivos estruturais, linha de resposta e Modo Investigativo).
+  - `docs/trajetoria-3d.gif` (5.10 MB): Deep-dive de topologia tridimensional, navegação orbital suave a 60 FPS, filtro de conectivos e cometa de trajetória neural.
+  - `docs/modo-investigativo.gif` (2.67 MB): Deep-dive de interpretabilidade e amostragem de tokens, com clique interativo em palavras da resposta e auditoria em tempo real das distribuições de probabilidade direta e indireta.
+  - `docs/demo.png` (307 KB, 1376x736): Nova imagem de capa de alta resolução exibindo a constelação semântica completa com agrupamento dinâmico.
+- Seções de aprofundamento visual integradas ao `README.md` ilustrando a topologia neural e a balança probabilística de tokens.
+- Otimização do `.gitignore` para preservar os vídeos brutos em disco sem inflar o histórico de commits do repositório Git.
+
+---
+
 ## [0.5.9] - 2026-10-10
 
 ### Modificado

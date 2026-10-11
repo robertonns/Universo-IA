@@ -29,3 +29,7 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# Rascunhos e mídias de captura brutas
+scratch/
+docs/*.mp4
