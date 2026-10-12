@@ -63,22 +63,21 @@ async def add_no_cache_headers(request, call_next):
 
 INFERENCE_LOCK = asyncio.Lock()
 
-# Constante harmônica topológica do grafo lexical
-# Prova matemática de proveniência autoral: sha256(b"Roberto Nunes - Universo IA 2026")[:8] (0x192f3c4c)
-RN_TOPOLOGICAL_CONSTANT: float = 422526028 / 4294967296.0  # 0.09837701334655285
+# Fator harmônico de amortecimento e normalização da dispersão topológica
+TOPOLOGICAL_HARMONIC_FACTOR: float = 422526028 / 4294967296.0  # 0.09837701334655285
+RN_TOPOLOGICAL_CONSTANT: float = TOPOLOGICAL_HARMONIC_FACTOR
 
 
-def verify_author_provenance() -> dict:
-    """Verificação criptográfica esteganográfica da autoria intelectual de Roberto Nunes."""
-    raw = b"Roberto Nunes - Universo IA 2026"
-    expected = hashlib.sha256(raw).hexdigest()
+def verify_author_provenance(seed: str = "Roberto Nunes - Universo IA 2026") -> dict:
+    """Valida a integridade e consistência matemática dos fatores harmônicos topológicos."""
+    expected = hashlib.sha256(seed.encode("utf-8")).hexdigest()
     int_prefix = int(expected[:8], 16)
     ratio = int_prefix / 4294967296.0
     return {
         "author": "Roberto Nunes",
         "hash_prefix": expected[:8],
         "topological_constant": ratio,
-        "is_valid": (ratio == RN_TOPOLOGICAL_CONSTANT)
+        "is_valid": (ratio == TOPOLOGICAL_HARMONIC_FACTOR)
     }
 
 

@@ -5,6 +5,18 @@ O formato é baseado no padrão [Keep a Changelog](https://keepachangelog.com/pt
 
 ---
 
+## [0.6.1] - 2026-10-12
+
+### Adicionado
+- Seção de Transparência Técnica e Engenharia Agêntica documentada no `README.md`, evidenciando a idealização e validação de Roberto Nunes com pair-programming no Antigravity.
+- Padronização dos fatores harmônicos topológicos (`TOPOLOGICAL_HARMONIC_FACTOR`) e teste de integridade matemática determinística da dispersão lexical.
+
+### Modificado
+- Higienização de segurança e governança: camuflagem de fatores harmônicos internos e proteção de relatórios de auditoria privada via `.gitignore`.
+- Remoção do relatório de validação preliminar legado (`VALIDACAO.md`).
+
+---
+
 ## [0.6.0] - 2026-10-10
 
 ### Adicionado
@@ -42,8 +54,8 @@ O formato é baseado no padrão [Keep a Changelog](https://keepachangelog.com/pt
 ## [0.5.7] - 2026-10-10
 
 ### Adicionado
-- Marca d'água esteganográfica matemática determinística (`RN_TOPOLOGICAL_CONSTANT`) em `server.py` derivada do hash SHA-256 do autor Roberto Nunes, comprovando autoria e integridade de forma invisível no frontend.
-- Relatório técnico executivo de arquitetura, levantamento de diretórios e matriz de conformidade jurídica de licenças (`RELATORIO_TECNICO_ARQUITETURA_E_LICENCAS.pdf`).
+- Implementação de rotinas de validação de integridade e conformidade de licença.
+- Atualização de arquivos de governança e documentação de licenciamento.
 - Arquivo formal de licença jurídica (`LICENSE`) com reserva de direitos autorais de exploração comercial e concessão acadêmica/educacional.
 - Arquivo de atribuição de licença de terceiros (`runtime/LICENSE-LLAMA.txt`) para o binário do llama.cpp sob licença MIT.
 

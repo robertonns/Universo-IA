@@ -8,7 +8,8 @@
 
 Plataforma interativa de interpretabilidade e visualização em tempo real da mecânica interna de modelos de linguagem (LLMs). O projeto combina inferência local em CPU, projeção tridimensional lexical via Three.js e investigação probabilística de próximos tokens sem necessidade de placas de vídeo dedicadas ou APIs comerciais na nuvem.
 
-Idealizado e desenvolvido por **Roberto Nunes**.
+Idealizado, concebido e validado por Roberto Nunes.  
+Código e instrumentação técnica implementados via fluxos agênticos no Antigravity.
 
 ---
 
@@ -221,6 +222,13 @@ Contribuições, correções de bugs, melhorias de acessibilidade e novas aborda
 4. Envie seus commits e abra um Pull Request detalhado.
 
 Consulte o arquivo `CONTRIBUTING.md` para conhecer as diretrizes de código e estilo.
+
+---
+
+## Transparência Técnica e Engenharia Agêntica
+
+Este projeto foi idealizado, desenhado arquiteturalmente, instruído e validado por Roberto Nunes.  
+A implementação de código-fonte, suítes de teste e orquestração de componentes foram executadas através de fluxos de pair-programming agêntico no ecossistema Antigravity.
 
 ---
 
